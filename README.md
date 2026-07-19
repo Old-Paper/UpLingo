@@ -12,7 +12,7 @@ UpLingo 是一款面向内容创作者的 Windows 桌面数据小组件。它把
 
 ## 下载与运行
 
-在本仓库的 **Releases** 页面下载最新分发包，解压后运行 `UpLingo-1.10.0.exe`。
+在本仓库的 **Releases** 页面下载最新分发包，解压后运行 `UpLingo-1.10.1.exe`。
 
 系统要求：Windows 10 / Windows 11，以及 .NET Framework 4.8。
 
