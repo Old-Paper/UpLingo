@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <AssemblyName>UpLingo-1.10.0</AssemblyName>
+    <AssemblyName>UpLingo-1.10.1</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>True</UseWindowsForms>
@@ -10,6 +10,12 @@
   <PropertyGroup>
     <LangVersion>12.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>None</DebugType>
+    <DebugSymbols>False</DebugSymbols>
+    <Deterministic>True</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/src</PathMap>
   </PropertyGroup>
   <PropertyGroup />
   <ItemGroup />
