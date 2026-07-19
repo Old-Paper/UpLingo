@@ -1,0 +1,48 @@
+{
+  "refresh_minutes": 60,
+  "low_power_mode": true,
+  "dock_to_tray": true,
+  "show_full_counts": false,
+  "show_tray_counts": true,
+  "silent_start": false,
+  "always_on_top": false,
+  "lock_position": false,
+  "position": {
+    "x": 80,
+    "y": 80
+  },
+  "youtube_api_key": "YOUR_YOUTUBE_API_KEY",
+  "overtake_warn_percent": 10,
+  "surge_alert_percent": 10,
+  "milestones": [
+    1000,
+    10000,
+    100000,
+    1000000,
+    10000000
+  ],
+  "channels": [
+    {
+      "platform": "bilibili",
+      "label": "我的B站",
+      "bilibili_uid": "YOUR_BILIBILI_UID"
+    },
+    {
+      "platform": "youtube",
+      "label": "我的YouTube",
+      "youtube_channel": "@your_handle_or_UC_channel_id"
+    }
+  ],
+  "cached_counts": [],
+  "daily_baselines": [],
+  "daily_history": [],
+  "weekly_baselines": [],
+  "achieved_milestones": [],
+  "achievement_records": [],
+  "monthly_updates": [],
+  "usage_stats": [],
+  "professional_checkins": [],
+  "professional_makeup_cards": 0,
+  "creator_makeup_cards": 0,
+  "warn_records": []
+}
