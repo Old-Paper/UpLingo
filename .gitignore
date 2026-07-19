@@ -1,0 +1,30 @@
+# Codex workspace state
+.agents/
+.codex/
+backups/
+outputs/
+work/dotnet-sdk/
+work/release-staging-*/
+work/*
+!work/decompiled-latest/
+!work/decompiled-latest/**
+!work/UpLingo-distributable-assets/
+!work/UpLingo-distributable-assets/**
+work/fireworks-fullscreen*.png
+
+# Build output
+work/decompiled-latest/bin/
+work/decompiled-latest/obj/
+**/[Bb]in/
+**/[Oo]bj/
+
+# Local application data - may contain credentials or personal history
+**/config.json
+**/config.json.bak
+**/weekly_report.txt
+**/*.log
+
+# Local IDE files
+.vs/
+*.user
+*.suo
