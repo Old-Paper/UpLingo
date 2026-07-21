@@ -166,6 +166,7 @@ internal sealed class UsageStatsForm : Form
 		ProfessionalAppDefinition app = ProfessionalAppCatalog.Find(record.app_id);
 		Color color = app?.Accent ?? Theme.TextMuted;
 		string text = string.IsNullOrEmpty(record.label) ? (app?.Label ?? "专业软件") : record.label;
+		string text2 = FormatCardDuration(record.total_seconds);
 		CardPanel card = new CardPanel
 		{
 			Size = new Size(248, 86),
@@ -184,6 +185,9 @@ internal sealed class UsageStatsForm : Form
 			TextAlign = ContentAlignment.MiddleCenter
 		};
 		card.Controls.Add(label);
+		Font font = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
+		int num = TextRenderer.MeasureText(text2, font, new Size(int.MaxValue, 24), TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 4;
+		int num2 = Math.Max(116, card.Width - 12 - num);
 		Label label2 = new Label
 		{
 			Text = text,
@@ -191,19 +195,19 @@ internal sealed class UsageStatsForm : Form
 			BackColor = Color.Transparent,
 			Font = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold),
 			AutoEllipsis = true,
-			Size = new Size(130, 20),
+			Size = new Size(Math.Max(70, num2 - 45), 20),
 			Location = new Point(37, 10)
 		};
 		card.Controls.Add(label2);
 		Label label3 = new Label
 		{
-			Text = UsageStatsService.FormatDuration(record.total_seconds),
+			Text = text2,
 			ForeColor = Theme.TextPrimary,
 			BackColor = Color.Transparent,
-			Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-			AutoEllipsis = true,
-			Size = new Size(102, 24),
-			Location = new Point(136, 8),
+			Font = font,
+			AutoEllipsis = false,
+			Size = new Size(card.Width - 12 - num2, 24),
+			Location = new Point(num2, 8),
 			TextAlign = ContentAlignment.MiddleRight
 		};
 		card.Controls.Add(label3);
@@ -229,6 +233,11 @@ internal sealed class UsageStatsForm : Form
 		};
 		card.Controls.Add(label5);
 		return card;
+	}
+
+	private static string FormatCardDuration(long seconds)
+	{
+		return UsageStatsService.FormatDuration(seconds).Replace(" ", "");
 	}
 
 	private Control CreateProfessionalCheckinCard()
