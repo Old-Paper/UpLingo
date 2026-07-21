@@ -12,8 +12,8 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Creator card partial: `Win11SubscriberWidget/WidgetForm.Creator.cs`.
 - Professional usage partial: `Win11SubscriberWidget/WidgetForm.UsageTracking.cs`.
 - Build: `..\dotnet-sdk\dotnet.exe build .\Win11SubscriberWidget.csproj -c Release --no-restore` from this directory.
-- Output executable: `bin\Release\net48\UpLingo-1.10.1.exe`.
-- Logic check: run `bin\Release\net48\UpLingo-1.10.1.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
+- Output executable: `bin\Release\net48\UpLingo-1.10.2.exe`.
+- Logic check: run `bin\Release\net48\UpLingo-1.10.2.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
 - Interface check: run the EXE with `--fetch-test`; it writes `fetch-test.log` and does not save fetched data.
 - Standard local check: run `./RunChecks.ps1`.
 
