@@ -1,4 +1,4 @@
-UpLingo v1.10.1
+UpLingo v1.10.2
 ===============
 
 系统要求
@@ -9,7 +9,7 @@ UpLingo v1.10.1
 快速开始
 --------
 1. 解压整个文件夹，不要只单独复制 EXE。
-2. 双击 UpLingo-1.10.1.exe 或 run_widget.bat。
+2. 双击 UpLingo-1.10.2.exe 或 run_widget.bat。
 3. 首次运行会生成 config.json。
 4. 右键小组件或托盘图标打开“设置”，填写 B站 UID、YouTube 频道和 YouTube Data API Key。
 5. 也可以把 config.example.json 复制为 config.json 后手动编辑。
