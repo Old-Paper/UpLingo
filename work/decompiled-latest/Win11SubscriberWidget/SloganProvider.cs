@@ -7,7 +7,7 @@ namespace Win11SubscriberWidget;
 
 internal static class SloganProvider
 {
-	public const int MaxDisplayLength = 16;
+	public const int MaxDisplayLength = 24;
 
 	private static readonly string[] Defaults = new string[5] { "保持更新，增长自会发生", "稳定输出，就是最强复利", "今天也比昨天更近一步", "每个粉丝都值得被认真对待", "持续创作，答案会在路上" };
 
@@ -36,11 +36,7 @@ internal static class SloganProvider
 
 	public static string ToDisplayText(string slogan)
 	{
-		if (string.IsNullOrEmpty(slogan) || slogan.Length <= 16)
-		{
-			return slogan ?? "";
-		}
-		return slogan.Substring(0, 15) + "…";
+		return slogan ?? "";
 	}
 
 	private static void EnsureFile()

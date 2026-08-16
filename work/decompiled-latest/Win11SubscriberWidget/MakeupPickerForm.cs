@@ -12,6 +12,7 @@ internal sealed class MakeupPickerForm : Form
 	private MakeupPickerForm(string title, List<DateTime> candidates, bool monthly)
 	{
 		Text = AppInfo.DisplayName + " · " + title;
+		Icon = AppIcon.Load();
 		StartPosition = FormStartPosition.CenterParent;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MinimizeBox = false;

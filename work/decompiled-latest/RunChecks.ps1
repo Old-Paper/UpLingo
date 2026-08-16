@@ -4,8 +4,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = [IO.Path]::GetFullPath($PSScriptRoot)
+$portableDotnetFixed = Join-Path (Split-Path $root -Parent) "dotnet-sdk-fixed\dotnet.exe"
 $portableDotnet = Join-Path (Split-Path $root -Parent) "dotnet-sdk\dotnet.exe"
-$dotnet = if (Test-Path -LiteralPath $portableDotnet) { $portableDotnet } else { "dotnet" }
+$dotnet = if (Test-Path -LiteralPath $portableDotnetFixed) { $portableDotnetFixed } elseif (Test-Path -LiteralPath $portableDotnet) { $portableDotnet } else { "dotnet" }
 [xml]$project = Get-Content -LiteralPath (Join-Path $root "Win11SubscriberWidget.csproj") -Raw -Encoding UTF8
 $assemblyName = [string]($project.Project.PropertyGroup.AssemblyName | Select-Object -First 1)
 if ([string]::IsNullOrWhiteSpace($assemblyName)) { throw "AssemblyName is missing." }

@@ -10,9 +10,21 @@ using System.Windows.Forms;
 
 namespace Win11SubscriberWidget;
 
-internal partial class WidgetForm : Form
+internal partial class WidgetForm : Form, IMessageFilter
 {
-	private const int StartupRefreshDelayMinutes = 5;
+	private const int StartupRefreshDelaySeconds = 300;
+
+	private const int WsChild = 1073741824;
+
+	private const int WsPopup = unchecked((int)2147483648u);
+
+	private const int WsCaption = 12582912;
+
+	private const int WsSystemMenu = 524288;
+
+	private const int WsMinimizeBox = 131072;
+
+	private const int WsMaximizeBox = 65536;
 
 	private const int RowHeight = 70;
 
@@ -26,6 +38,10 @@ internal partial class WidgetForm : Form
 
 	private readonly Dictionary<int, int> targetOfBenchmark = new Dictionary<int, int>();
 
+	private readonly List<Control> dragControls = new List<Control>();
+
+	private readonly HashSet<Control> interactiveDragControls = new HashSet<Control>();
+
 	private WidgetConfig config;
 
 	private NotifyIcon trayIcon;
@@ -34,19 +50,13 @@ internal partial class WidgetForm : Form
 
 	private ToolStripMenuItem showHideItem;
 
-	private ToolStripMenuItem lowPowerItem;
+	private ToolStripMenuItem windowStateItem;
 
-	private ToolStripMenuItem fullCountsItem;
+	private ToolStripMenuItem freeWindowItem;
 
-	private ToolStripMenuItem trayDataItem;
+	private ToolStripMenuItem topmostWindowItem;
 
-	private ToolStripMenuItem topmostItem;
-
-	private ToolStripMenuItem lockPositionItem;
-
-	private ToolStripMenuItem silentStartItem;
-
-	private ToolStripMenuItem startupItem;
+	private ToolStripMenuItem lockedWindowItem;
 
 	private ToolStripMenuItem usageStatsItem;
 
@@ -60,7 +70,11 @@ internal partial class WidgetForm : Form
 
 	private int trayMetricIndex;
 
+	private int lastTrayClickTick = int.MinValue;
+
 	private Icon generatedTrayIcon;
+
+	private Icon trayBaseIcon;
 
 	private Label statusLabel;
 
@@ -69,6 +83,16 @@ internal partial class WidgetForm : Form
 	private Label sloganLabel;
 
 	private Panel contentPanel;
+
+	private Panel headerPanel;
+
+	private FlowLayoutPanel rowsPanel;
+
+	private WindowStateButton windowStateButton;
+
+	private Label closeButton;
+
+	private SettingsForm settingsForm;
 
 	private CardPanel creatorCard;
 
@@ -109,7 +133,15 @@ internal partial class WidgetForm : Form
 
 	private bool dragging;
 
-	private bool hideAfterInitialShow;
+	private bool dragCandidate;
+
+	private bool dragMoved;
+
+	private bool suppressNextChannelClick;
+
+	private System.Windows.Forms.Timer channelClickTimer;
+
+	private int pendingChannelEditIndex = -1;
 
 	private int pendingAchievementCelebrations;
 
@@ -117,12 +149,20 @@ internal partial class WidgetForm : Form
 
 	private Point dragStartLocation;
 
+	private bool edgeResizing;
+
+	private int edgeResizeHit;
+
+	private Point edgeResizeStartScreen;
+
+	private Rectangle edgeResizeStartBounds;
+
 	protected override CreateParams CreateParams
 	{
 		get
 		{
 			CreateParams obj = base.CreateParams;
-			obj.ClassStyle |= 131072;
+			obj.Style = (obj.Style | WsPopup) & ~(WsChild | WsCaption | WsSystemMenu | WsMinimizeBox | WsMaximizeBox);
 			return obj;
 		}
 	}
@@ -131,18 +171,19 @@ internal partial class WidgetForm : Form
 	{
 		config = initialConfig;
 		config.ApplyDefaults();
-		hideAfterInitialShow = config.silent_start;
 		Text = AppInfo.DisplayName;
+		Icon = AppIcon.Load();
 		base.ShowInTaskbar = false;
 		base.FormBorderStyle = FormBorderStyle.None;
 		base.StartPosition = FormStartPosition.Manual;
 		base.AutoScaleMode = AutoScaleMode.Dpi;
 		BackColor = Theme.WindowBackground;
 		base.ClientSize = CalculateWidgetSize();
-		MinimumSize = new Size(340, 140);
+		MinimumSize = new Size(340, CalculateWidgetSize().Height);
 		DoubleBuffered = true;
 		RestoreCreatorState();
 		BuildUi();
+		Application.AddMessageFilter(this);
 		BuildTrayMenu();
 		BuildTrayIcon();
 		MoveToSavedPosition();
@@ -156,7 +197,7 @@ internal partial class WidgetForm : Form
 		if (autoRefresh)
 		{
 			RenderCachedCountsForStartup();
-			ScheduleRefreshAfterMinutes(5);
+			ScheduleRefreshAfterSeconds(Math.Min(config.refresh_seconds, StartupRefreshDelaySeconds));
 		}
 	}
 
@@ -164,14 +205,30 @@ internal partial class WidgetForm : Form
 	{
 		base.OnHandleCreated(e);
 		NativeMethods.ApplyRoundedCorners(base.Handle);
+		NativeMethods.SetWindowAsPopup(base.Handle);
+		ApplyNormalWindowMode();
 	}
 
 	public void QuitFromApp()
 	{
+		PrepareForExit();
+		Close();
+	}
+
+	private void PrepareForExit()
+	{
+		if (appQuitting)
+		{
+			return;
+		}
 		CaptureUsageStats(forceSave: true);
 		StopUsageStatsTracking();
 		appQuitting = true;
+		Application.RemoveMessageFilter(this);
 		refreshGeneration++;
+		channelClickTimer?.Stop();
+		channelClickTimer?.Dispose();
+		channelClickTimer = null;
 		if (trayIconTimer != null)
 		{
 			trayIconTimer.Stop();
@@ -188,18 +245,26 @@ internal partial class WidgetForm : Form
 			generatedTrayIcon.Dispose();
 			generatedTrayIcon = null;
 		}
-		Close();
+		if (trayBaseIcon != null)
+		{
+			trayBaseIcon.Dispose();
+			trayBaseIcon = null;
+		}
 	}
 
 	protected override void OnFormClosing(FormClosingEventArgs e)
 	{
-		if (!appQuitting)
+		if (!appQuitting && e.CloseReason == CloseReason.UserClosing && !string.Equals(config.close_action, WidgetCloseActions.Exit, StringComparison.OrdinalIgnoreCase))
 		{
 			e.Cancel = true;
 			Hide();
 		}
 		else
 		{
+			if (!appQuitting)
+			{
+				PrepareForExit();
+			}
 			base.OnFormClosing(e);
 		}
 	}
@@ -211,14 +276,6 @@ internal partial class WidgetForm : Form
 		{
 			FireworksForm.ShowCelebration(this, pendingAchievementCelebrations);
 			pendingAchievementCelebrations = 0;
-		}
-		if (hideAfterInitialShow)
-		{
-			hideAfterInitialShow = false;
-			BeginInvoke((Action)delegate
-			{
-				Hide();
-			});
 		}
 	}
 
@@ -239,6 +296,228 @@ internal partial class WidgetForm : Form
 		colorBlend.Positions = new float[3] { 0f, 0.5f, 1f };
 		linearGradientBrush.InterpolationColors = colorBlend;
 		e.Graphics.FillRectangle(linearGradientBrush, rect);
+	}
+
+	protected override void OnResize(EventArgs e)
+	{
+		base.OnResize(e);
+		LayoutResponsiveControls();
+	}
+
+	protected override void OnResizeEnd(EventArgs e)
+	{
+		base.OnResizeEnd(e);
+		if (!appQuitting && WindowState == FormWindowState.Normal)
+		{
+			config.window_width = ClientSize.Width;
+			config.window_height = ClientSize.Height;
+			ConfigStore.Save(config);
+		}
+	}
+
+	protected override void WndProc(ref Message m)
+	{
+		if (m.Msg == 131)
+		{
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		if (m.Msg == 161 && IsResizeHit(m.WParam.ToInt32()) && !WidgetWindowModes.IsLocked(config?.window_mode))
+		{
+			BeginEdgeResize(m.WParam.ToInt32());
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		if (edgeResizing && m.Msg == 512)
+		{
+			ContinueEdgeResize();
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		if (edgeResizing && (m.Msg == 514 || m.Msg == 162 || m.Msg == 533))
+		{
+			EndEdgeResize();
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		base.WndProc(ref m);
+		if (m.Msg != 132 || m.Result != new IntPtr(1) || WidgetWindowModes.IsLocked(config?.window_mode))
+		{
+			return;
+		}
+		long hitPoint = m.LParam.ToInt64();
+		int x = unchecked((short)(hitPoint & 65535));
+		int y = unchecked((short)((hitPoint >> 16) & 65535));
+		Point clientPoint = PointToClient(new Point(x, y));
+		int border = Math.Max(5, DeviceDpi / 16);
+		bool left = clientPoint.X <= border;
+		bool right = clientPoint.X >= ClientSize.Width - border;
+		bool top = clientPoint.Y <= border;
+		bool bottom = clientPoint.Y >= ClientSize.Height - border;
+		if (left && top)
+		{
+			m.Result = new IntPtr(13);
+		}
+		else if (right && top)
+		{
+			m.Result = new IntPtr(14);
+		}
+		else if (left && bottom)
+		{
+			m.Result = new IntPtr(16);
+		}
+		else if (right && bottom)
+		{
+			m.Result = new IntPtr(17);
+		}
+		else if (left)
+		{
+			m.Result = new IntPtr(10);
+		}
+		else if (right)
+		{
+			m.Result = new IntPtr(11);
+		}
+		else if (top)
+		{
+			m.Result = new IntPtr(12);
+		}
+		else if (bottom)
+		{
+			m.Result = new IntPtr(15);
+		}
+	}
+
+	public bool PreFilterMessage(ref Message m)
+	{
+		if (appQuitting)
+		{
+			return false;
+		}
+		if (edgeResizing)
+		{
+			if (m.Msg == 512 || m.Msg == 160)
+			{
+				ContinueEdgeResize();
+				return true;
+			}
+			if (m.Msg == 514 || m.Msg == 162 || m.Msg == 533)
+			{
+				EndEdgeResize();
+				return true;
+			}
+		}
+		if (m.Msg != 513 || !Visible || WidgetWindowModes.IsLocked(config?.window_mode))
+		{
+			return false;
+		}
+		int hit = ResizeHitAtScreenPoint(Cursor.Position);
+		if (!IsResizeHit(hit))
+		{
+			return false;
+		}
+		BeginEdgeResize(hit);
+		return true;
+	}
+
+	private int ResizeHitAtScreenPoint(Point screenPoint)
+	{
+		Rectangle bounds = Bounds;
+		if (!bounds.Contains(screenPoint))
+		{
+			return 1;
+		}
+		int border = Math.Max(5, DeviceDpi / 16);
+		bool left = screenPoint.X - bounds.Left <= border;
+		bool right = bounds.Right - screenPoint.X <= border;
+		bool top = screenPoint.Y - bounds.Top <= border;
+		bool bottom = bounds.Bottom - screenPoint.Y <= border;
+		if (left && top)
+		{
+			return 13;
+		}
+		if (right && top)
+		{
+			return 14;
+		}
+		if (left && bottom)
+		{
+			return 16;
+		}
+		if (right && bottom)
+		{
+			return 17;
+		}
+		if (left)
+		{
+			return 10;
+		}
+		if (right)
+		{
+			return 11;
+		}
+		if (top)
+		{
+			return 12;
+		}
+		return bottom ? 15 : 1;
+	}
+
+	private static bool IsResizeHit(int hit)
+	{
+		return hit >= 10 && hit <= 17;
+	}
+
+	private void BeginEdgeResize(int hit)
+	{
+		edgeResizing = true;
+		edgeResizeHit = hit;
+		edgeResizeStartScreen = Cursor.Position;
+		edgeResizeStartBounds = Bounds;
+		Capture = true;
+	}
+
+	private void ContinueEdgeResize()
+	{
+		Point position = Cursor.Position;
+		int deltaX = position.X - edgeResizeStartScreen.X;
+		int deltaY = position.Y - edgeResizeStartScreen.Y;
+		Rectangle bounds = edgeResizeStartBounds;
+		int minimumWidth = Math.Max(1, MinimumSize.Width);
+		int minimumHeight = Math.Max(1, MinimumSize.Height);
+		if (edgeResizeHit == 10 || edgeResizeHit == 13 || edgeResizeHit == 16)
+		{
+			int right = bounds.Right;
+			bounds.X = Math.Min(bounds.X + deltaX, right - minimumWidth);
+			bounds.Width = right - bounds.X;
+		}
+		else if (edgeResizeHit == 11 || edgeResizeHit == 14 || edgeResizeHit == 17)
+		{
+			bounds.Width = Math.Max(minimumWidth, bounds.Width + deltaX);
+		}
+		if (edgeResizeHit == 12 || edgeResizeHit == 13 || edgeResizeHit == 14)
+		{
+			int bottom = bounds.Bottom;
+			bounds.Y = Math.Min(bounds.Y + deltaY, bottom - minimumHeight);
+			bounds.Height = bottom - bounds.Y;
+		}
+		else if (edgeResizeHit == 15 || edgeResizeHit == 16 || edgeResizeHit == 17)
+		{
+			bounds.Height = Math.Max(minimumHeight, bounds.Height + deltaY);
+		}
+		Bounds = bounds;
+	}
+
+	private void EndEdgeResize()
+	{
+		edgeResizing = false;
+		Capture = false;
+		if (!appQuitting && WindowState == FormWindowState.Normal)
+		{
+			config.window_width = ClientSize.Width;
+			config.window_height = ClientSize.Height;
+			ConfigStore.Save(config);
+		}
 	}
 
 	private int VisibleRowCount()
@@ -279,7 +558,14 @@ internal partial class WidgetForm : Form
 
 	private void BuildUi()
 	{
+		Size preferredSize = CalculateWidgetSize();
+		bool rebuilding = contentPanel != null;
+		channelClickTimer?.Stop();
+		pendingChannelEditIndex = -1;
+		suppressNextChannelClick = false;
 		rowToolTip.RemoveAll();
+		dragControls.Clear();
+		interactiveDragControls.Clear();
 		while (base.Controls.Count > 0)
 		{
 			Control control = base.Controls[0];
@@ -288,13 +574,14 @@ internal partial class WidgetForm : Form
 		}
 		rows.Clear();
 		BuildBenchmarkPairs();
-		base.ClientSize = CalculateWidgetSize();
+		base.ClientSize = rebuilding ? new Size(Math.Max(base.ClientSize.Width, preferredSize.Width), Math.Max(base.ClientSize.Height, preferredSize.Height)) : new Size(Math.Max(config.window_width, preferredSize.Width), Math.Max(config.window_height, preferredSize.Height));
+		MinimumSize = new Size(340, preferredSize.Height);
 		contentPanel = new Panel();
 		contentPanel.BackColor = Theme.PanelBackground;
 		contentPanel.Dock = DockStyle.Fill;
 		contentPanel.Padding = new Padding(14, 10, 14, 12);
 		base.Controls.Add(contentPanel);
-		Panel headerPanel = new Panel();
+		headerPanel = new Panel();
 		headerPanel.BackColor = contentPanel.BackColor;
 		headerPanel.Dock = DockStyle.Top;
 		headerPanel.Height = 26;
@@ -307,7 +594,6 @@ internal partial class WidgetForm : Form
 		label.AutoSize = true;
 		label.Location = new Point(0, 2);
 		headerPanel.Controls.Add(label);
-		rowToolTip.SetToolTip(label, AppInfo.DisplayName);
 		statusDot = new Label();
 		statusDot.Text = "●";
 		statusDot.ForeColor = Theme.TextMuted;
@@ -325,7 +611,7 @@ internal partial class WidgetForm : Form
 		sloganLabel.AutoEllipsis = true;
 		sloganLabel.TextAlign = ContentAlignment.MiddleLeft;
 		sloganLabel.Cursor = Cursors.Hand;
-		sloganLabel.Size = new Size(140, 20);
+		sloganLabel.Size = new Size(Math.Max(80, headerPanel.Width - 160), 20);
 		sloganLabel.Location = new Point(76, 2);
 		sloganLabel.DoubleClick += delegate
 		{
@@ -333,84 +619,17 @@ internal partial class WidgetForm : Form
 		};
 		headerPanel.Controls.Add(sloganLabel);
 		UpdateSlogan();
-		Label refreshButton = new Label();
-		refreshButton.Text = "↻";
-		refreshButton.ForeColor = Theme.TextMuted;
-		refreshButton.BackColor = headerPanel.BackColor;
-		refreshButton.Font = new Font("Segoe UI Symbol", 11f, FontStyle.Regular);
-		refreshButton.TextAlign = ContentAlignment.MiddleCenter;
-		refreshButton.Cursor = Cursors.Hand;
-		refreshButton.Size = new Size(26, 24);
-		refreshButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-		refreshButton.Location = new Point(base.ClientSize.Width - 138, 0);
-		refreshButton.MouseEnter += delegate
+		windowStateButton = new WindowStateButton
 		{
-			refreshButton.BackColor = Theme.CardBackground;
-			refreshButton.ForeColor = Theme.TextPrimary;
+			Mode = config.window_mode,
+			BackColor = headerPanel.BackColor,
+			Anchor = AnchorStyles.Top | AnchorStyles.Right,
+			Location = new Point(headerPanel.Width - 54, 0)
 		};
-		refreshButton.MouseLeave += delegate
-		{
-			refreshButton.BackColor = headerPanel.BackColor;
-			refreshButton.ForeColor = Theme.TextMuted;
-		};
-		refreshButton.Click += delegate
-		{
-			RefreshNow();
-		};
-		rowToolTip.SetToolTip(refreshButton, "立即刷新");
-		headerPanel.Controls.Add(refreshButton);
-		Label settingsButton = new Label();
-		settingsButton.Text = "⚙";
-		settingsButton.ForeColor = Theme.TextMuted;
-		settingsButton.BackColor = headerPanel.BackColor;
-		settingsButton.Font = new Font("Segoe UI Symbol", 10f, FontStyle.Regular);
-		settingsButton.TextAlign = ContentAlignment.MiddleCenter;
-		settingsButton.Cursor = Cursors.Hand;
-		settingsButton.Size = new Size(26, 24);
-		settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-		settingsButton.Location = new Point(base.ClientSize.Width - 82, 0);
-		settingsButton.MouseEnter += delegate
-		{
-			settingsButton.BackColor = Theme.CardBackground;
-			settingsButton.ForeColor = Theme.TextPrimary;
-		};
-		settingsButton.MouseLeave += delegate
-		{
-			settingsButton.BackColor = headerPanel.BackColor;
-			settingsButton.ForeColor = Theme.TextMuted;
-		};
-		settingsButton.Click += delegate
-		{
-			OpenSettings();
-		};
-		headerPanel.Controls.Add(settingsButton);
-		Label usageStatsButton = new Label();
-		usageStatsButton.Text = "◷";
-		usageStatsButton.ForeColor = Theme.TextMuted;
-		usageStatsButton.BackColor = headerPanel.BackColor;
-		usageStatsButton.Font = new Font("Segoe UI Symbol", 10.5f, FontStyle.Regular);
-		usageStatsButton.TextAlign = ContentAlignment.MiddleCenter;
-		usageStatsButton.Cursor = Cursors.Hand;
-		usageStatsButton.Size = new Size(26, 24);
-		usageStatsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-		usageStatsButton.Location = new Point(base.ClientSize.Width - 110, 0);
-		usageStatsButton.MouseEnter += delegate
-		{
-			usageStatsButton.BackColor = Theme.CardBackground;
-			usageStatsButton.ForeColor = Theme.TextPrimary;
-		};
-		usageStatsButton.MouseLeave += delegate
-		{
-			usageStatsButton.BackColor = headerPanel.BackColor;
-			usageStatsButton.ForeColor = Theme.TextMuted;
-		};
-		usageStatsButton.Click += delegate
-		{
-			OpenUsageStats();
-		};
-		rowToolTip.SetToolTip(usageStatsButton, "使用统计");
-		headerPanel.Controls.Add(usageStatsButton);
-		Label closeButton = new Label();
+		windowStateButton.Click += delegate { CycleWindowMode(); };
+		rowToolTip.SetToolTip(windowStateButton, WidgetWindowModes.DisplayName(config.window_mode));
+		headerPanel.Controls.Add(windowStateButton);
+		closeButton = new Label();
 		closeButton.Text = "×";
 		closeButton.ForeColor = Theme.TextMuted;
 		closeButton.BackColor = headerPanel.BackColor;
@@ -419,7 +638,7 @@ internal partial class WidgetForm : Form
 		closeButton.Cursor = Cursors.Hand;
 		closeButton.Size = new Size(26, 24);
 		closeButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-		closeButton.Location = new Point(base.ClientSize.Width - 54, 0);
+		closeButton.Location = new Point(headerPanel.Width - 26, 0);
 		closeButton.MouseEnter += delegate
 		{
 			closeButton.BackColor = Theme.CloseHoverBackground;
@@ -432,7 +651,7 @@ internal partial class WidgetForm : Form
 		};
 		closeButton.Click += delegate
 		{
-			Hide();
+			HandleCloseButton();
 		};
 		headerPanel.Controls.Add(closeButton);
 		statusLabel = new Label();
@@ -445,14 +664,14 @@ internal partial class WidgetForm : Form
 		statusLabel.Height = 22;
 		contentPanel.Controls.Add(statusLabel);
 		statusLabel.BringToFront();
-		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel();
-		flowLayoutPanel.FlowDirection = FlowDirection.TopDown;
-		flowLayoutPanel.WrapContents = false;
-		flowLayoutPanel.Dock = DockStyle.Fill;
-		flowLayoutPanel.BackColor = contentPanel.BackColor;
-		flowLayoutPanel.Padding = new Padding(0, 2, 0, 0);
-		contentPanel.Controls.Add(flowLayoutPanel);
-		flowLayoutPanel.BringToFront();
+		rowsPanel = new FlowLayoutPanel();
+		rowsPanel.FlowDirection = FlowDirection.TopDown;
+		rowsPanel.WrapContents = false;
+		rowsPanel.Dock = DockStyle.Fill;
+		rowsPanel.BackColor = contentPanel.BackColor;
+		rowsPanel.Padding = new Padding(0, 2, 0, 0);
+		contentPanel.Controls.Add(rowsPanel);
+		rowsPanel.BringToFront();
 		if (VisibleRowCount() == 0)
 		{
 			Label label2 = new Label();
@@ -462,18 +681,19 @@ internal partial class WidgetForm : Form
 			label2.Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
 			label2.AutoSize = true;
 			label2.Margin = new Padding(2, 12, 0, 0);
-			flowLayoutPanel.Controls.Add(label2);
+			rowsPanel.Controls.Add(label2);
+			AttachWidgetMouseEvents(label2);
 		}
 		for (int num = 0; num < config.channels.Count; num++)
 		{
 			if (!config.channels[num].benchmark)
 			{
-				flowLayoutPanel.Controls.Add(CreateChannelRow(config.channels[num], num, benchmarksOfTarget.ContainsKey(num)));
+				rowsPanel.Controls.Add(CreateChannelRow(config.channels[num], num, benchmarksOfTarget.ContainsKey(num)));
 			}
 		}
 		if (HasOwnYouTubeChannel())
 		{
-			flowLayoutPanel.Controls.Add(CreateCreatorCard());
+			rowsPanel.Controls.Add(CreateCreatorCard());
 			UpdateCreatorCard();
 		}
 		else
@@ -485,7 +705,90 @@ internal partial class WidgetForm : Form
 		AttachWidgetMouseEvents(this);
 		AttachWidgetMouseEvents(contentPanel);
 		AttachWidgetMouseEvents(headerPanel);
-		AttachWidgetMouseEvents(flowLayoutPanel);
+		AttachWidgetMouseEvents(label);
+		AttachWidgetMouseEvents(statusDot);
+		AttachWidgetMouseEvents(statusLabel);
+		AttachWidgetMouseEvents(sloganLabel, interactive: true);
+		AttachWidgetMouseEvents(rowsPanel);
+		LayoutResponsiveControls();
+		UpdateWindowStateUi();
+	}
+
+	private void LayoutResponsiveControls()
+	{
+		if (contentPanel == null || contentPanel.IsDisposed)
+		{
+			return;
+		}
+		if (headerPanel != null && !headerPanel.IsDisposed)
+		{
+			int width = Math.Max(0, headerPanel.ClientSize.Width);
+			if (windowStateButton != null)
+			{
+				windowStateButton.Location = new Point(Math.Max(0, width - 54), 0);
+			}
+			if (closeButton != null)
+			{
+				closeButton.Location = new Point(Math.Max(0, width - 26), 0);
+			}
+			if (sloganLabel != null && windowStateButton != null)
+			{
+				sloganLabel.Width = Math.Max(56, windowStateButton.Left - sloganLabel.Left - 4);
+				FitSloganFont();
+			}
+		}
+		if (rowsPanel == null || rowsPanel.IsDisposed)
+		{
+			return;
+		}
+		int cardWidth = Math.Max(312, rowsPanel.ClientSize.Width - rowsPanel.Padding.Horizontal);
+		foreach (ChannelRow row in rows)
+		{
+			if (row.Card == null || row.Card.IsDisposed)
+			{
+				continue;
+			}
+			row.Card.Width = cardWidth;
+			row.CountLabel.Location = new Point(cardWidth - 124, row.CountLabel.Top);
+			row.TitleLabel.Width = Math.Max(70, cardWidth - 174);
+			row.DetailLabel.Width = Math.Max(70, cardWidth - 180);
+			row.MilestoneProgressBar.Width = Math.Max(40, cardWidth - 116);
+			if (row.ProgressBar != null)
+			{
+				row.ProgressBar.Width = Math.Max(40, cardWidth - 64);
+			}
+		}
+		if (creatorCard != null && !creatorCard.IsDisposed)
+		{
+			creatorCard.Width = cardWidth;
+			creatorLabel.Width = Math.Max(80, cardWidth - 44);
+			creatorSubLabel.Width = Math.Max(80, cardWidth - 44);
+		}
+	}
+
+	private void FitSloganFont()
+	{
+		if (sloganLabel == null || sloganLabel.Width <= 0)
+		{
+			return;
+		}
+		float selectedSize = 7.5f;
+		for (float size = 7.5f; size >= 6f; size -= 0.25f)
+		{
+			using Font candidate = new Font("Microsoft YaHei UI", size, FontStyle.Regular);
+			Size measured = TextRenderer.MeasureText(sloganLabel.Text ?? "", candidate, new Size(int.MaxValue, sloganLabel.Height), TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+			selectedSize = size;
+			if (measured.Width <= sloganLabel.Width)
+			{
+				break;
+			}
+		}
+		if (Math.Abs(sloganLabel.Font.Size - selectedSize) > 0.05f)
+		{
+			Font oldFont = sloganLabel.Font;
+			sloganLabel.Font = new Font("Microsoft YaHei UI", selectedSize, FontStyle.Regular);
+			oldFont.Dispose();
+		}
 	}
 
 	private void BuildBenchmarkPairs()
@@ -577,7 +880,7 @@ internal partial class WidgetForm : Form
 			deltaBar.Size = new Size(cardPanel.Width - 50 - 14, 4);
 			deltaBar.Location = new Point(50, 60);
 			cardPanel.Controls.Add(deltaBar);
-			AttachWidgetMouseEvents(deltaBar);
+			AttachWidgetMouseEvents(deltaBar, interactive: true);
 		}
 		AttachRowOpenEvents(cardPanel, channelIndex);
 		AttachRowOpenEvents(badgeLabel, channelIndex);
@@ -590,19 +893,20 @@ internal partial class WidgetForm : Form
 		{
 			ChannelIndex = channelIndex,
 			Card = cardPanel,
+			TitleLabel = label2,
 			CountLabel = countDisplay,
 			DetailLabel = label3,
 			MilestoneLabel = label,
 			MilestoneProgressBar = milestoneBar,
 			ProgressBar = deltaBar
 		});
-		AttachWidgetMouseEvents(cardPanel);
-		AttachWidgetMouseEvents(badgeLabel);
-		AttachWidgetMouseEvents(label2);
-		AttachWidgetMouseEvents(label3);
-		AttachWidgetMouseEvents(countDisplay);
-		AttachWidgetMouseEvents(label);
-		AttachWidgetMouseEvents(milestoneBar);
+		AttachWidgetMouseEvents(cardPanel, interactive: true);
+		AttachWidgetMouseEvents(badgeLabel, interactive: true);
+		AttachWidgetMouseEvents(label2, interactive: true);
+		AttachWidgetMouseEvents(label3, interactive: true);
+		AttachWidgetMouseEvents(countDisplay, interactive: true);
+		AttachWidgetMouseEvents(label, interactive: true);
+		AttachWidgetMouseEvents(milestoneBar, interactive: true);
 		return cardPanel;
 	}
 
@@ -610,24 +914,24 @@ internal partial class WidgetForm : Form
 	{
 		trayMenu = new ContextMenuStrip();
 		showHideItem = new ToolStripMenuItem("隐藏小组件");
-		ToolStripMenuItem toolStripMenuItem = new ToolStripMenuItem("立即刷新");
+		ToolStripMenuItem refreshItem = new ToolStripMenuItem("立即刷新");
 		ToolStripMenuItem restorePositionItem = new ToolStripMenuItem("恢复到右下角");
-		ToolStripMenuItem toolStripMenuItem2 = new ToolStripMenuItem("设置...");
-		ToolStripMenuItem toolStripMenuItem3 = new ToolStripMenuItem("成就记录...");
+		ToolStripMenuItem settingsItem = new ToolStripMenuItem("设置...");
+		ToolStripMenuItem achievementsItem = new ToolStripMenuItem("成就记录...");
 		usageStatsItem = new ToolStripMenuItem("使用统计...");
-		lowPowerItem = new ToolStripMenuItem("省电模式（间隔至少 60 分钟）");
-		fullCountsItem = new ToolStripMenuItem("显示完整数字");
-		trayDataItem = new ToolStripMenuItem("轮播 B站 / YouTube 粉丝数（关闭时固定 YT）");
-		topmostItem = new ToolStripMenuItem("窗口置顶");
-		lockPositionItem = new ToolStripMenuItem("锁定位置");
-		silentStartItem = new ToolStripMenuItem("静默启动");
-		startupItem = new ToolStripMenuItem("开机启动");
-		ToolStripMenuItem toolStripMenuItem4 = new ToolStripMenuItem("退出");
+		windowStateItem = new ToolStripMenuItem("窗口状态");
+		freeWindowItem = new ToolStripMenuItem("自由移动");
+		topmostWindowItem = new ToolStripMenuItem("窗口置顶");
+		lockedWindowItem = new ToolStripMenuItem("锁定且置顶");
+		windowStateItem.DropDownItems.Add(freeWindowItem);
+		windowStateItem.DropDownItems.Add(topmostWindowItem);
+		windowStateItem.DropDownItems.Add(lockedWindowItem);
+		ToolStripMenuItem exitItem = new ToolStripMenuItem("退出");
 		showHideItem.Click += delegate
 		{
 			ToggleVisibility();
 		};
-		toolStripMenuItem.Click += delegate
+		refreshItem.Click += delegate
 		{
 			RefreshNow();
 		};
@@ -635,11 +939,11 @@ internal partial class WidgetForm : Form
 		{
 			RestoreToBottomRight();
 		};
-		toolStripMenuItem2.Click += delegate
+		settingsItem.Click += delegate
 		{
 			OpenSettings();
 		};
-		toolStripMenuItem3.Click += delegate
+		achievementsItem.Click += delegate
 		{
 			OpenAchievementLog();
 		};
@@ -647,71 +951,23 @@ internal partial class WidgetForm : Form
 		{
 			OpenUsageStats();
 		};
-		lowPowerItem.Click += delegate
-		{
-			config.low_power_mode = !config.low_power_mode;
-			ConfigStore.Save(config);
-			ScheduleNextRefresh();
-			UpdateTrayMenuState();
-		};
-		fullCountsItem.Click += delegate
-		{
-			config.show_full_counts = !config.show_full_counts;
-			ConfigStore.Save(config);
-			ReapplyCountFormat();
-			UpdateTrayMenuState();
-		};
-		trayDataItem.Click += delegate
-		{
-			config.show_tray_counts = !config.show_tray_counts;
-			ConfigStore.Save(config);
-			UpdateTrayMenuState();
-			UpdateTrayIconVisual();
-		};
-		topmostItem.Click += delegate
-		{
-			config.always_on_top = !config.always_on_top;
-			ConfigStore.Save(config);
-			ApplyNormalWindowMode();
-			UpdateTrayMenuState();
-		};
-		lockPositionItem.Click += delegate
-		{
-			config.lock_position = !config.lock_position;
-			ConfigStore.Save(config);
-			UpdateTrayMenuState();
-		};
-		silentStartItem.Click += delegate
-		{
-			config.silent_start = !config.silent_start;
-			ConfigStore.Save(config);
-			UpdateTrayMenuState();
-		};
-		startupItem.Click += delegate
-		{
-			StartupManager.SetEnabled(!StartupManager.IsEnabled());
-			UpdateTrayMenuState();
-		};
-		toolStripMenuItem4.Click += delegate
+		freeWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.Free); };
+		topmostWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.Topmost); };
+		lockedWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.LockedTopmost); };
+		exitItem.Click += delegate
 		{
 			QuitFromApp();
 		};
 		trayMenu.Items.Add(showHideItem);
-		trayMenu.Items.Add(toolStripMenuItem);
+		trayMenu.Items.Add(refreshItem);
 		trayMenu.Items.Add(restorePositionItem);
-		trayMenu.Items.Add(toolStripMenuItem2);
-		trayMenu.Items.Add(toolStripMenuItem3);
+		trayMenu.Items.Add(settingsItem);
+		trayMenu.Items.Add(achievementsItem);
 		trayMenu.Items.Add(usageStatsItem);
 		trayMenu.Items.Add(new ToolStripSeparator());
-		trayMenu.Items.Add(lowPowerItem);
-		trayMenu.Items.Add(fullCountsItem);
-		trayMenu.Items.Add(trayDataItem);
-		trayMenu.Items.Add(topmostItem);
-		trayMenu.Items.Add(lockPositionItem);
-		trayMenu.Items.Add(silentStartItem);
-		trayMenu.Items.Add(startupItem);
+		trayMenu.Items.Add(windowStateItem);
 		trayMenu.Items.Add(new ToolStripSeparator());
-		trayMenu.Items.Add(toolStripMenuItem4);
+		trayMenu.Items.Add(exitItem);
 		trayMenu.Opening += delegate
 		{
 			UpdateTrayMenuState();
@@ -721,12 +977,24 @@ internal partial class WidgetForm : Form
 	private void BuildTrayIcon()
 	{
 		trayIcon = new NotifyIcon();
-		trayIcon.Icon = SystemIcons.Application;
+		trayBaseIcon = AppIcon.Load();
+		trayIcon.Icon = trayBaseIcon;
 		trayIcon.Text = AppInfo.DisplayName;
 		trayIcon.Visible = true;
 		trayIcon.ContextMenuStrip = trayMenu;
-		trayIcon.DoubleClick += delegate
+		trayIcon.MouseClick += delegate(object sender, MouseEventArgs e)
 		{
+			if (e.Button != MouseButtons.Left)
+			{
+				return;
+			}
+			int tick = Environment.TickCount;
+			int elapsed = unchecked(tick - lastTrayClickTick);
+			if (elapsed >= 0 && elapsed < SystemInformation.DoubleClickTime)
+			{
+				return;
+			}
+			lastTrayClickTick = tick;
 			ToggleVisibility();
 		};
 		trayIconTimer = new System.Windows.Forms.Timer();
@@ -739,14 +1007,12 @@ internal partial class WidgetForm : Form
 
 	private void UpdateTrayMenuState()
 	{
-		showHideItem.Text = (base.Visible ? "隐藏小组件" : "显示小组件");
-		lowPowerItem.Checked = config.low_power_mode;
-		fullCountsItem.Checked = config.show_full_counts;
-		trayDataItem.Checked = config.show_tray_counts;
-		topmostItem.Checked = config.always_on_top;
-		lockPositionItem.Checked = config.lock_position;
-		silentStartItem.Checked = config.silent_start;
-		startupItem.Checked = StartupManager.IsEnabled();
+		showHideItem.Text = (base.Visible && IsWidgetSurfaceVisible()) ? "隐藏小组件" : "显示小组件";
+		string mode = WidgetWindowModes.Normalize(config.window_mode);
+		freeWindowItem.Checked = mode == WidgetWindowModes.Free;
+		topmostWindowItem.Checked = mode == WidgetWindowModes.Topmost;
+		lockedWindowItem.Checked = mode == WidgetWindowModes.LockedTopmost;
+		windowStateItem.Text = "窗口状态 · " + WidgetWindowModes.DisplayName(mode);
 	}
 
 	private void RestoreToBottomRight()
@@ -763,14 +1029,37 @@ internal partial class WidgetForm : Form
 
 	private void ToggleVisibility()
 	{
-		if (base.Visible)
+		if (base.Visible && IsWidgetSurfaceVisible())
 		{
 			Hide();
+			UpdateTrayMenuState();
 			return;
 		}
-		Show();
-		MoveToSavedPosition();
+		bool wasHidden = !base.Visible;
+		if (wasHidden)
+		{
+			Show();
+			MoveToSavedPosition();
+		}
+		if (WindowState == FormWindowState.Minimized)
+		{
+			WindowState = FormWindowState.Normal;
+		}
 		ApplyNormalWindowMode();
+		BringToFront();
+		Activate();
+		NativeMethods.SetForegroundWindow(Handle);
+		UpdateTrayMenuState();
+	}
+
+	private bool IsWidgetSurfaceVisible()
+	{
+		if (!base.Visible || base.WindowState == FormWindowState.Minimized || !base.IsHandleCreated)
+		{
+			return false;
+		}
+		Point center = PointToScreen(new Point(Math.Max(1, ClientSize.Width / 2), Math.Max(1, ClientSize.Height / 2)));
+		return NativeMethods.IsWindowAtScreenPoint(Handle, center);
 	}
 
 	private void OpenAchievementLog()
@@ -781,45 +1070,99 @@ internal partial class WidgetForm : Form
 
 	private void OpenSettings()
 	{
-		using SettingsForm settingsForm = new SettingsForm(ConfigStore.Clone(config));
-		if (settingsForm.ShowDialog(this) == DialogResult.OK)
+		if (settingsForm != null && !settingsForm.IsDisposed)
 		{
-			string text = OwnerYouTubeConfiguredKey(config);
-			WidgetConfig resultConfig = settingsForm.ResultConfig;
-			string text2 = OwnerYouTubeConfiguredKey(resultConfig);
-			refreshGeneration++;
-			refreshing = false;
-			if (!string.Equals(text, text2, StringComparison.OrdinalIgnoreCase))
-			{
-				resultConfig.creator_state = null;
-				latestVideoAt = null;
-				lastCreatorFetch = null;
-			}
-			config = resultConfig;
-			ConfigStore.Save(config);
-			RestoreCreatorState();
-			BuildUi();
-			MoveToSavedPosition();
-			ApplyNormalWindowMode();
-			ScheduleNextRefresh();
-			RefreshNow();
+			settingsForm.Show();
+			settingsForm.BringToFront();
+			settingsForm.Activate();
+			return;
 		}
+		settingsForm = new SettingsForm(config);
+		settingsForm.Applied += delegate { ApplySettingsChanges(); };
+		settingsForm.FormClosed += delegate { settingsForm = null; };
+		settingsForm.Show(this);
 	}
 
-	private void AttachWidgetMouseEvents(Control control)
+	private void ApplySettingsChanges()
 	{
+		refreshGeneration++;
+		refreshing = false;
+		config.ApplyDefaults();
+		lastResults = new List<FetchResult>();
+		trayMetrics.Clear();
+		staticYouTubeTrayMetric = null;
+		RestoreCreatorState();
+		BuildUi();
+		MoveToSavedPosition();
+		ApplyNormalWindowMode();
+		ScheduleNextRefresh();
+		UpdateTrayIconVisual();
+		RefreshNow();
+	}
+
+	private void AttachWidgetMouseEvents(Control control, bool interactive = false)
+	{
+		control.MouseDown -= WidgetMouseDown;
+		control.MouseMove -= WidgetMouseMove;
+		control.MouseUp -= WidgetMouseUp;
+		control.MouseClick -= WidgetMouseClick;
 		control.MouseDown += WidgetMouseDown;
 		control.MouseMove += WidgetMouseMove;
 		control.MouseUp += WidgetMouseUp;
 		control.MouseClick += WidgetMouseClick;
+		if (!dragControls.Contains(control))
+		{
+			dragControls.Add(control);
+		}
+		if (interactive)
+		{
+			interactiveDragControls.Add(control);
+		}
+		UpdateDragCursor(control);
 	}
 
 	private void AttachRowOpenEvents(Control control, int channelIndex)
 	{
-		control.DoubleClick += delegate
+		control.MouseClick += delegate(object sender, MouseEventArgs e)
 		{
+			if (e.Button != MouseButtons.Left)
+			{
+				return;
+			}
+			if (suppressNextChannelClick)
+			{
+				suppressNextChannelClick = false;
+				return;
+			}
+			pendingChannelEditIndex = channelIndex;
+			if (channelClickTimer == null)
+			{
+				channelClickTimer = new System.Windows.Forms.Timer { Interval = SystemInformation.DoubleClickTime + 40 };
+				channelClickTimer.Tick += delegate
+				{
+					channelClickTimer.Stop();
+					int index = pendingChannelEditIndex;
+					pendingChannelEditIndex = -1;
+					if (index >= 0)
+					{
+						OpenChannelEditor(index);
+					}
+				};
+			}
+			channelClickTimer.Stop();
+			channelClickTimer.Start();
+		};
+		control.MouseDoubleClick += delegate(object sender, MouseEventArgs e)
+		{
+			if (e.Button != MouseButtons.Left)
+			{
+				return;
+			}
+			channelClickTimer?.Stop();
+			pendingChannelEditIndex = -1;
 			OpenChannelPage(channelIndex);
 		};
+		rowToolTip.SetToolTip(control, "单击编辑，双击打开");
 	}
 
 	private void OpenChannelPage(int channelIndex)
@@ -833,7 +1176,7 @@ internal partial class WidgetForm : Form
 		if (IsBilibili(channelConfig.platform))
 		{
 			string text2 = FirstString(channelConfig.bilibili_uid, channelConfig.uid, channelConfig.vmid);
-			if (text2.Length > 0)
+			if (string.IsNullOrEmpty(ChannelInputValidator.ValidateBilibili(text2)))
 			{
 				text = "https://space.bilibili.com/" + text2;
 			}
@@ -847,8 +1190,12 @@ internal partial class WidgetForm : Form
 			}
 			else
 			{
-				string text3 = ChannelCacheKey(channelConfig);
-				if (text3.StartsWith("@"))
+				string text3 = ChannelIdentity.ConfiguredKey(channelConfig);
+				if (!string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube(text3)))
+				{
+					text = null;
+				}
+				else if (text3.StartsWith("@"))
 				{
 					text = "https://www.youtube.com/" + text3;
 				}
@@ -856,20 +1203,102 @@ internal partial class WidgetForm : Form
 				{
 					text = "https://www.youtube.com/channel/" + text3;
 				}
+				else if (text3.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || text3.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+				{
+					text = text3;
+				}
 			}
 		}
 		if (text == null)
 		{
+			MessageBox.Show("频道信息尚未填写或格式无效。请先单击频道卡片进行编辑。", AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 			return;
 		}
 		try
 		{
-			Process.Start(text);
+			Process.Start(new ProcessStartInfo { FileName = text, UseShellExecute = true });
 		}
 		catch (Exception ex)
 		{
 			AppLogger.Error("channel-open", ex);
 		}
+	}
+
+	private void OpenChannelEditor(int channelIndex)
+	{
+		if (channelIndex < 0 || channelIndex >= config.channels.Count || config.channels[channelIndex].benchmark)
+		{
+			return;
+		}
+		ChannelConfig channel = config.channels[channelIndex];
+		bool bilibili = IsBilibili(channel.platform);
+		string currentValue = bilibili ? FirstString(channel.bilibili_uid, channel.uid, channel.vmid) : ChannelIdentity.ConfiguredKey(channel);
+		using ChannelEditForm editor = new ChannelEditForm(bilibili, currentValue);
+		if (editor.ShowDialog(this) != DialogResult.OK)
+		{
+			return;
+		}
+		WidgetConfig backup = ConfigStore.Clone(config);
+		string oldCacheKey = ChannelCacheKey(channel);
+		string oldYouTubeKey = OwnerYouTubeConfiguredKey(config);
+		try
+		{
+			if (bilibili)
+			{
+				channel.bilibili_uid = editor.ChannelValue;
+				channel.uid = null;
+				channel.vmid = null;
+			}
+			else
+			{
+				channel.youtube_channel = editor.ChannelValue;
+				channel.youtube_channel_id = null;
+				channel.channel_id = null;
+				channel.youtube_handle = null;
+				channel.handle = null;
+				channel.youtube_username = null;
+				channel.username = null;
+				channel.youtube_url = null;
+				channel.url = null;
+			}
+			string newCacheKey = ChannelCacheKey(channel);
+			foreach (ChannelConfig item in config.channels)
+			{
+				if (item != null && item.benchmark && string.Equals(item.compare_to_key, oldCacheKey, StringComparison.OrdinalIgnoreCase))
+				{
+					item.compare_to_key = newCacheKey;
+				}
+			}
+			string newYouTubeKey = OwnerYouTubeConfiguredKey(config);
+			if (!string.Equals(oldYouTubeKey, newYouTubeKey, StringComparison.OrdinalIgnoreCase))
+			{
+				config.creator_state = null;
+				latestVideoAt = null;
+				lastCreatorFetch = null;
+			}
+			ConfigStore.Save(config);
+			if (!ConfigStore.TryReadCurrent(out WidgetConfig saved) || channelIndex >= saved.channels.Count || !string.Equals(ChannelIdentity.ConfiguredKey(saved.channels[channelIndex]), ChannelIdentity.ConfiguredKey(channel), StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidOperationException("保存后的频道配置校验失败");
+			}
+		}
+		catch (Exception ex)
+		{
+			config.channels = backup.channels;
+			config.creator_state = backup.creator_state;
+			AppLogger.Error("channel-save", ex);
+			MessageBox.Show("频道信息未能保存：" + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			return;
+		}
+		refreshGeneration++;
+		refreshing = false;
+		lastResults = new List<FetchResult>();
+		trayMetrics.Clear();
+		staticYouTubeTrayMetric = null;
+		BuildUi();
+		ApplyNormalWindowMode();
+		UpdateTrayIconVisual();
+		RefreshNow();
 	}
 
 	private void WidgetMouseClick(object sender, MouseEventArgs e)
@@ -882,9 +1311,11 @@ internal partial class WidgetForm : Form
 
 	private void WidgetMouseDown(object sender, MouseEventArgs e)
 	{
-		if (e.Button == MouseButtons.Left && !config.lock_position)
+		if (e.Button == MouseButtons.Left && !WidgetWindowModes.IsLocked(config.window_mode))
 		{
-			dragging = true;
+			dragCandidate = true;
+			dragging = false;
+			dragMoved = false;
 			dragStartScreen = Cursor.Position;
 			dragStartLocation = base.Location;
 		}
@@ -892,18 +1323,33 @@ internal partial class WidgetForm : Form
 
 	private void WidgetMouseMove(object sender, MouseEventArgs e)
 	{
-		if (dragging && !config.lock_position)
+		if (!dragCandidate || WidgetWindowModes.IsLocked(config.window_mode))
 		{
-			Point position = Cursor.Position;
-			base.Location = new Point(dragStartLocation.X + position.X - dragStartScreen.X, dragStartLocation.Y + position.Y - dragStartScreen.Y);
+			return;
 		}
+		Point position = Cursor.Position;
+		if (!dragging)
+		{
+			Size dragSize = SystemInformation.DragSize;
+			if (Math.Abs(position.X - dragStartScreen.X) < dragSize.Width / 2 && Math.Abs(position.Y - dragStartScreen.Y) < dragSize.Height / 2)
+			{
+				return;
+			}
+			dragging = true;
+			dragMoved = true;
+			suppressNextChannelClick = true;
+		}
+		base.Location = new Point(dragStartLocation.X + position.X - dragStartScreen.X, dragStartLocation.Y + position.Y - dragStartScreen.Y);
 	}
 
 	private void WidgetMouseUp(object sender, MouseEventArgs e)
 	{
-		if (dragging)
+		bool moved = dragging && dragMoved;
+		dragCandidate = false;
+		dragging = false;
+		dragMoved = false;
+		if (moved)
 		{
-			dragging = false;
 			config.dock_to_tray = false;
 			config.position = new PositionConfig
 			{
@@ -911,7 +1357,7 @@ internal partial class WidgetForm : Form
 				y = base.Location.Y
 			};
 			ConfigStore.Save(config);
-			ApplyNormalWindowMode();
+			BeginInvoke((Action)delegate { suppressNextChannelClick = false; });
 		}
 	}
 
@@ -952,38 +1398,81 @@ internal partial class WidgetForm : Form
 	{
 		if (base.IsHandleCreated)
 		{
-			NativeMethods.SetParent(base.Handle, IntPtr.Zero);
-			NativeMethods.SetWindowAsPopup(base.Handle);
-			base.TopMost = config.always_on_top;
-			NativeMethods.SetWindowPos(base.Handle, IntPtr.Zero, base.Location.X, base.Location.Y, base.Width, base.Height, 116u);
+			bool topmost = WidgetWindowModes.IsTopmost(config.window_mode);
+			base.TopMost = topmost;
+			NativeMethods.SetWindowPos(base.Handle, topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 		}
 	}
 
-	private int EffectiveRefreshMinutes()
+	private void CycleWindowMode()
 	{
-		int num = ((config.refresh_minutes <= 0) ? 60 : config.refresh_minutes);
-		if (config.low_power_mode && num < 60)
+		SetWindowMode(WidgetWindowModes.Next(config.window_mode));
+	}
+
+	private void SetWindowMode(string mode)
+	{
+		config.SetWindowMode(mode);
+		dragCandidate = false;
+		dragging = false;
+		ConfigStore.Save(config);
+		ApplyNormalWindowMode();
+		UpdateWindowStateUi();
+		UpdateTrayMenuState();
+	}
+
+	private void UpdateWindowStateUi()
+	{
+		if (windowStateButton != null)
 		{
-			num = 60;
+			windowStateButton.Mode = config.window_mode;
+			rowToolTip.SetToolTip(windowStateButton, WidgetWindowModes.DisplayName(config.window_mode));
 		}
-		if (num < 1)
+		foreach (Control control in dragControls)
 		{
-			num = 1;
+			UpdateDragCursor(control);
 		}
-		return num;
+	}
+
+	private void UpdateDragCursor(Control control)
+	{
+		if (control == null || control.IsDisposed)
+		{
+			return;
+		}
+		if (interactiveDragControls.Contains(control))
+		{
+			control.Cursor = Cursors.Hand;
+		}
+		else
+		{
+			control.Cursor = WidgetWindowModes.IsLocked(config.window_mode) ? Cursors.Default : Cursors.SizeAll;
+		}
+	}
+
+	private void HandleCloseButton()
+	{
+		if (string.Equals(config.close_action, WidgetCloseActions.Exit, StringComparison.OrdinalIgnoreCase))
+		{
+			QuitFromApp();
+		}
+		else
+		{
+			Hide();
+			UpdateTrayMenuState();
+		}
 	}
 
 	private void ScheduleNextRefresh()
 	{
-		ScheduleRefreshAfterMinutes(EffectiveRefreshMinutes());
+		ScheduleRefreshAfterSeconds(config.refresh_seconds);
 	}
 
-	private void ScheduleRefreshAfterMinutes(int minutes)
+	private void ScheduleRefreshAfterSeconds(int seconds)
 	{
 		if (refreshTimer != null)
 		{
 			refreshTimer.Stop();
-			refreshTimer.Interval = Math.Max(1000, minutes * 60 * 1000);
+			refreshTimer.Interval = Math.Max(1000, WidgetConfig.NormalizeRefreshSeconds(seconds) * 1000);
 			refreshTimer.Start();
 		}
 	}
@@ -1056,6 +1545,7 @@ internal partial class WidgetForm : Form
 		{
 			string text = SloganProvider.Next();
 			sloganLabel.Text = SloganProvider.ToDisplayText(text);
+			FitSloganFont();
 			rowToolTip.SetToolTip(sloganLabel, text + "\n双击编辑标语文件");
 		}
 	}
@@ -1120,7 +1610,9 @@ internal partial class WidgetForm : Form
 		}
 		if (statusLabel != null)
 		{
-			statusLabel.Text = (flag ? "已载入上次数据 · 5 分钟后刷新" : "首次刷新将在 5 分钟后开始");
+			int delaySeconds = Math.Min(config.refresh_seconds, StartupRefreshDelaySeconds);
+			string delayText = (delaySeconds < 60) ? (delaySeconds + " 秒") : ((delaySeconds / 60) + " 分钟");
+			statusLabel.Text = flag ? ("已载入上次数据 · " + delayText + "后刷新") : ("首次刷新将在 " + delayText + "后开始");
 			statusLabel.ForeColor = Theme.TextMuted;
 		}
 	}
@@ -2105,7 +2597,7 @@ internal partial class WidgetForm : Form
 				SetGeneratedTrayIcon(CreateTrayDataIcon(staticYouTubeTrayMetric));
 				return;
 			}
-			trayIcon.Icon = SystemIcons.Application;
+			trayIcon.Icon = trayBaseIcon;
 			DisposeGeneratedTrayIcon();
 			return;
 		}
@@ -2115,7 +2607,7 @@ internal partial class WidgetForm : Form
 			{
 				trayIconTimer.Stop();
 			}
-			trayIcon.Icon = SystemIcons.Application;
+			trayIcon.Icon = trayBaseIcon;
 			DisposeGeneratedTrayIcon();
 			return;
 		}
@@ -2300,7 +2792,7 @@ internal partial class WidgetForm : Form
 			long num10 = num3 - num2;
 			ChannelConfig channelConfig2 = config.channels[num];
 			long? num11 = ((fetchResult != null && fetchResult.Ok) ? GetTodayDelta(row.ChannelIndex, num2) : ((long?)null));
-			string text3 = ((value.Count > 1) ? SafeText(channelConfig2.label, channelConfig2.platform) : "对标");
+			string text3 = ((value.Count > 1) ? SafeText(channelConfig2.label, channelConfig2.platform) : "参考");
 			row.DetailLabel.Text = ComposeBenchmarkDetail(row.DetailLabel, text3, num2, num3, num11);
 			row.DetailLabel.ForeColor = ((num10 > 0) ? Theme.Warning : Theme.Success);
 			if (row.ProgressBar != null)
@@ -2323,9 +2815,9 @@ internal partial class WidgetForm : Form
 		}
 		candidates.Add(primaryText);
 		candidates.Add(benchmarkName + countText + " · " + percentText.Replace(" ", ""));
-		if (!string.Equals(benchmarkName, "对标", StringComparison.Ordinal))
+		if (!string.Equals(benchmarkName, "参考", StringComparison.Ordinal))
 		{
-			candidates.Add("对标" + countText + " · " + percentText.Replace(" ", ""));
+			candidates.Add("参考" + countText + " · " + percentText.Replace(" ", ""));
 		}
 		candidates.Add(countText + " · " + percentText.Replace(" ", ""));
 		candidates.Add(percentText.Replace(" ", ""));
@@ -2398,6 +2890,7 @@ internal partial class WidgetForm : Form
 	{
 		if (row != null)
 		{
+			text = (text ?? "") + "\n单击编辑，双击打开";
 			if (row.Card != null)
 			{
 				rowToolTip.SetToolTip(row.Card, text);
@@ -2595,7 +3088,7 @@ internal partial class WidgetForm : Form
 		{
 			return ((double)value / 100000000.0).ToString("0.#") + "亿";
 		}
-		if (value >= 10000)
+		if (value >= 1000000)
 		{
 			return ((double)value / 10000.0).ToString("0.#") + "万";
 		}

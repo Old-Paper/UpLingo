@@ -29,6 +29,7 @@ internal class AchievementsForm : Form
 	public AchievementsForm()
 	{
 		Text = AppInfo.DisplayName + " · 成就记录";
+		Icon = AppIcon.Load();
 		base.StartPosition = FormStartPosition.CenterParent;
 		base.FormBorderStyle = FormBorderStyle.FixedDialog;
 		base.MinimizeBox = false;

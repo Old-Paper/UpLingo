@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -14,6 +15,14 @@ internal static class NativeMethods
 
 	public const uint SWP_FRAMECHANGED = 32u;
 
+	public const uint SWP_NOSIZE = 1u;
+
+	public const uint SWP_NOMOVE = 2u;
+
+	public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+	public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+
 	private const int GWL_STYLE = -16;
 
 	private const long WS_CHILD = 1073741824L;
@@ -22,11 +31,23 @@ internal static class NativeMethods
 
 	private const long WS_VISIBLE = 268435456L;
 
+	private const long WS_CAPTION = 12582912L;
+
+	private const long WS_SYSMENU = 524288L;
+
+	private const long WS_MINIMIZEBOX = 131072L;
+
+	private const long WS_MAXIMIZEBOX = 65536L;
+
 	private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
 	private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
 
+	private const int DWMWA_BORDER_COLOR = 34;
+
 	private const int DWMWCP_ROUND = 2;
+
+	private const int DWMWA_COLOR_NONE = -2;
 
 	private const int EM_SETCUEBANNER = 5377;
 
@@ -66,6 +87,16 @@ internal static class NativeMethods
 	private static extern IntPtr GetForegroundWindow();
 
 	[DllImport("user32.dll")]
+	private static extern IntPtr WindowFromPoint(Point point);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+	[DllImport("user32.dll")]
 	private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
 	[DllImport("user32.dll")]
@@ -98,6 +129,20 @@ internal static class NativeMethods
 		return (int)processId;
 	}
 
+	public static bool IsWindowAtScreenPoint(IntPtr expectedRoot, Point screenPoint)
+	{
+		if (expectedRoot == IntPtr.Zero)
+		{
+			return false;
+		}
+		IntPtr window = WindowFromPoint(screenPoint);
+		if (window == IntPtr.Zero)
+		{
+			return false;
+		}
+		return GetAncestor(window, 2u) == expectedRoot;
+	}
+
 	public static bool HasRecentUserInput(int maximumIdleSeconds)
 	{
 		LASTINPUTINFO info = new LASTINPUTINFO
@@ -116,8 +161,10 @@ internal static class NativeMethods
 	{
 		try
 		{
-			int value = 2;
-			DwmSetWindowAttribute(hwnd, 33, ref value, 4);
+			int value = DWMWCP_ROUND;
+			DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref value, 4);
+			int borderColor = DWMWA_COLOR_NONE;
+			DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, 4);
 		}
 		catch (Exception ex)
 		{
@@ -141,8 +188,9 @@ internal static class NativeMethods
 	public static void SetWindowAsPopup(IntPtr hwnd)
 	{
 		long windowStyle = GetWindowStyle(hwnd);
-		windowStyle = (windowStyle | 0x80000000u | 0x10000000) & -1073741825;
+		windowStyle = (windowStyle | WS_POPUP | WS_VISIBLE) & ~(WS_CHILD | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
 		SetWindowStyle(hwnd, windowStyle);
+		SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	}
 
 	private static long GetWindowStyle(IntPtr hwnd)
