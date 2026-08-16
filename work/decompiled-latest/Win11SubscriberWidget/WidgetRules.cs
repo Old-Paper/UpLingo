@@ -172,7 +172,7 @@ internal static class WidgetRules
 		{
 			return text + (num / 100000000.0).ToString("0.#") + "亿";
 		}
-		if (num >= 10000.0)
+		if (num >= 1000000.0)
 		{
 			return text + (num / 10000.0).ToString("0.#") + "万";
 		}

@@ -9,10 +9,11 @@ Use this file to route work before reading source. Avoid opening all of `WidgetF
 | Professional-app detection, active time, daily software streak | `WidgetForm.UsageTracking.cs` | `ProfessionalAppCatalog.cs`, `UsageStatsService.cs`, `ProfessionalCheckinService.cs` |
 | YouTube upload card, monthly grid, creator messages | `WidgetForm.Creator.cs` | `CreatorFeed.cs`, `CreatorCheckinService.cs`, `WidgetRules.cs` |
 | Subscriber/API refresh | `RefreshService.cs` | `SubscriberFetcher.cs`, `CreatorFeed.cs`, `ChannelIdentity.cs` |
-| Subscriber rows, header, window movement | `WidgetForm.cs` | `CardPanel.cs`, `CountDisplay.cs`, `MilestoneBar.cs` |
+| Subscriber rows, header, window movement | `WidgetForm.cs` | `WindowStateButton.cs`, `ChannelEditForm.cs`, `CardPanel.cs`, `CountDisplay.cs`, `MilestoneBar.cs` |
 | Weekly report and history | `WeeklyReportStore.cs` | Search `BuildWeeklyReportAndRollBaselines` in `WidgetForm.cs` |
 | Achievements and fireworks | `MilestoneTracker.cs` | `AchievementsForm.cs`, `FireworksForm.cs` |
 | Settings/config migration | `SettingsForm.cs` | `WidgetConfig.cs`, `ConfigStore.cs`, config model files |
+| Application icon | `Resources/UpLingoIcon.svg` | `Resources/Generate-AppIcon.ps1`, `AppIcon.cs`, `.csproj` |
 | Packaging/deployment | root `BuildRelease.ps1` | `Properties/AssemblyInfo.cs`, `.csproj`, distributable assets |
 
 ## Invariants to preserve
@@ -23,6 +24,8 @@ Use this file to route work before reading source. Avoid opening all of `WidgetF
 - Cached startup data may render the UI but may not finalize a weekly report.
 - Channel identity changes must migrate or reset histories deliberately.
 - Existing deployments keep `config.json`, logs, reports, and personal `motivational_slogans.txt`.
+- Channel cards use delayed single-click editing so a double-click can open the channel without opening the editor. Preserve the drag threshold when changing these events.
+- Window state is one three-state value: `free`, `topmost`, or `locked_topmost`. Legacy booleans remain serialized only for backward compatibility.
 
 ## Verification
 

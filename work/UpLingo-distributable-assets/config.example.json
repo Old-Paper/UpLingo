@@ -1,12 +1,10 @@
 {
-  "refresh_minutes": 60,
-  "low_power_mode": true,
+  "refresh_seconds": 3600,
   "dock_to_tray": true,
   "show_full_counts": false,
   "show_tray_counts": true,
-  "silent_start": false,
-  "always_on_top": false,
-  "lock_position": false,
+  "window_mode": "topmost",
+  "close_action": "tray",
   "position": {
     "x": 80,
     "y": 80

@@ -15,6 +15,7 @@ internal static class LogicSelfTest
 			TestMonthlyChecks();
 			TestMilestones();
 			TestBenchmarkPercent();
+			TestWidgetPreferences();
 			TestWeeklyReportGate();
 			TestUsageStats();
 			TestCreatorMakeupCard();
@@ -60,9 +61,35 @@ internal static class LogicSelfTest
 	{
 		Assert(WidgetRules.FormatBenchmarkDeltaPercent(50, 100) == "还差 50%", "落后百分比不正确");
 		Assert(WidgetRules.FormatBenchmarkDeltaPercent(300, 100) == "已超过 200%", "超过百分比不正确");
-		Assert(WidgetRules.FormatBenchmarkCount(300000) == "30万", "整万对标数格式不正确");
-		Assert(WidgetRules.FormatBenchmarkCount(309387) == "30.9万", "对标数应使用万单位而不是完整数字");
-		Assert(WidgetRules.FormatBenchmarkCount(125000000) == "1.3亿", "对标数亿单位格式不正确");
+		Assert(WidgetRules.FormatBenchmarkCount(300000) == "300,000", "百万以下参考数应保留完整数字");
+		Assert(WidgetRules.FormatBenchmarkCount(999999) == "999,999", "百万以下参考数不应缩写");
+		Assert(WidgetRules.FormatBenchmarkCount(1000000) == "100万", "百万起应使用紧凑格式");
+		Assert(WidgetRules.FormatBenchmarkCount(125000000) == "1.3亿", "参考数亿单位格式不正确");
+	}
+
+	private static void TestWidgetPreferences()
+	{
+		WidgetConfig legacy = new WidgetConfig
+		{
+			refresh_minutes = 60,
+			always_on_top = false,
+			lock_position = false,
+			low_power_mode = true,
+			silent_start = true
+		};
+		legacy.ApplyDefaults();
+		Assert(legacy.refresh_seconds == 3600, "旧版分钟刷新配置迁移失败");
+		Assert(legacy.window_mode == WidgetWindowModes.Free, "旧版窗口状态迁移失败");
+		Assert(!legacy.low_power_mode && !legacy.silent_start, "已移除的重复开关仍在生效");
+		WidgetConfig modern = new WidgetConfig { refresh_seconds = 10, window_mode = WidgetWindowModes.LockedTopmost };
+		modern.ApplyDefaults();
+		Assert(modern.refresh_seconds == 60, "刷新间隔最低值应为 60 秒");
+		Assert(modern.always_on_top && modern.lock_position, "锁定且置顶状态映射失败");
+		modern.SetWindowMode(WidgetWindowModes.Topmost);
+		Assert(modern.always_on_top && !modern.lock_position, "置顶状态映射失败");
+		Assert(string.IsNullOrEmpty(ChannelInputValidator.ValidateBilibili("123456")), "有效 B 站 UID 被拒绝");
+		Assert(!string.IsNullOrEmpty(ChannelInputValidator.ValidateBilibili("YOUR_BILIBILI_UID")), "B 站占位 UID 未被拒绝");
+		Assert(string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube("@creator")), "有效 YouTube Handle 被拒绝");
 	}
 
 	private static void TestWeeklyReportGate()
@@ -79,7 +106,7 @@ internal static class LogicSelfTest
 			new FetchResult { Ok = true },
 			new FetchResult { Ok = false }
 		};
-		Assert(WidgetRules.CanGenerateWeeklyReport(channels, results), "对标失败不应阻止周报");
+		Assert(WidgetRules.CanGenerateWeeklyReport(channels, results), "参考频道失败不应阻止周报");
 		results[1].Ok = false;
 		Assert(!WidgetRules.CanGenerateWeeklyReport(channels, results), "自有平台失败时不应生成周报");
 	}

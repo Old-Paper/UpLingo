@@ -12,8 +12,8 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Creator card partial: `Win11SubscriberWidget/WidgetForm.Creator.cs`.
 - Professional usage partial: `Win11SubscriberWidget/WidgetForm.UsageTracking.cs`.
 - Build: `..\dotnet-sdk\dotnet.exe build .\Win11SubscriberWidget.csproj -c Release --no-restore` from this directory.
-- Output executable: `bin\Release\net48\UpLingo-1.10.2.exe`.
-- Logic check: run `bin\Release\net48\UpLingo-1.10.2.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
+- Output executable: `bin\Release\net48\UpLingo-1.11.0.exe`.
+- Logic check: run `bin\Release\net48\UpLingo-1.11.0.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
 - Interface check: run the EXE with `--fetch-test`; it writes `fetch-test.log` and does not save fetched data.
 - Standard local check: run `./RunChecks.ps1`.
 
@@ -28,7 +28,10 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - `MilestoneTracker.cs`, `AchievementsForm.cs`, `FireworksForm.cs`: achievements, logs, and fireworks.
 - `WeeklyReportStore.cs`: one text report block per week.
 - `CardPanel.cs`: sparkline, 12-month 投稿 check-in grid, and paired red/yellow + blue/purple flame streak drawing.
-- `SettingsForm.cs`: settings UI and benchmark-channel editing.
+- `SettingsForm.cs`: modeless settings UI and reference-channel editing.
+- `ChannelEditForm.cs`: validated single-click owner-channel editor.
+- `WindowStateButton.cs`: code-drawn three-state free/topmost/locked button.
+- `Resources/UpLingoIcon.svg` and `Resources/Generate-AppIcon.ps1`: reproducible application icon source and generator.
 - `AppLogger.cs`: redacted, rotating `widget_debug.log`.
 - `ProfessionalAppCatalog.cs`, `UsageStatsService.cs`, `ProfessionalCheckinService.cs`: local professional-software tracking, daily check-ins, and time-based make-up-card rewards.
 - `CreatorCheckinService.cs`, `MakeupPickerForm.cs`, `UsageStatsForm.cs`: 投稿/专业软件 check-in sections, make-up-card selection, and the statistics window.
@@ -41,7 +44,8 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Failed full-year history scans are retried with a persisted delay (one day for failure, seven days for truncation). Full-history retries calibrate counts only and must never mint retroactive 投稿补签卡.
 - A weekly report is generated only after every configured non-benchmark channel has fresh data. Cached startup data must not finalize it.
 - Refresh results carry an in-memory generation id; stale results after settings changes must be discarded.
-- Closing hides to tray. Normal launch is single-instance. `--self-test`, `--logic-test`, `--fetch-test`, and `--achievements` may run separately.
+- Closing hides to tray by default. Normal launch is single-instance. `--self-test`, `--logic-test`, `--fetch-test`, and `--achievements` may run separately.
+- Closing follows `close_action`: `tray` hides and `exit` quits. A single tray click hides a visible surface or restores a hidden/covered surface.
 - If tray carousel is off, show static YouTube subscriber count.
 - Do not restore any play/view-count request unless the UI feature is explicitly requested again.
 - Opening any known professional app completes the daily software check-in. Usage/reward time counts only while a known app owns the foreground window and Windows has seen user input within 5 minutes. Keep the aggregation local; never inspect files, projects, window titles, or send usage data anywhere. Cards may only repair historical days/months and never turn current pending time into a completed check-in.

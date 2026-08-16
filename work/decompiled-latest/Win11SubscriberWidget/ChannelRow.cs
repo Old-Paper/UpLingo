@@ -8,6 +8,8 @@ internal class ChannelRow
 
 	public CardPanel Card;
 
+	public Label TitleLabel;
+
 	public CountDisplay CountLabel;
 
 	public Label DetailLabel;

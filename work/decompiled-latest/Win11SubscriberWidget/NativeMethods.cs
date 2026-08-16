@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -13,6 +14,14 @@ internal static class NativeMethods
 	public const uint SWP_SHOWWINDOW = 64u;
 
 	public const uint SWP_FRAMECHANGED = 32u;
+
+	public const uint SWP_NOSIZE = 1u;
+
+	public const uint SWP_NOMOVE = 2u;
+
+	public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+	public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
 	private const int GWL_STYLE = -16;
 
@@ -66,6 +75,16 @@ internal static class NativeMethods
 	private static extern IntPtr GetForegroundWindow();
 
 	[DllImport("user32.dll")]
+	private static extern IntPtr WindowFromPoint(Point point);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+	[DllImport("user32.dll")]
 	private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
 	[DllImport("user32.dll")]
@@ -96,6 +115,20 @@ internal static class NativeMethods
 		}
 		GetWindowThreadProcessId(foregroundWindow, out var processId);
 		return (int)processId;
+	}
+
+	public static bool IsWindowAtScreenPoint(IntPtr expectedRoot, Point screenPoint)
+	{
+		if (expectedRoot == IntPtr.Zero)
+		{
+			return false;
+		}
+		IntPtr window = WindowFromPoint(screenPoint);
+		if (window == IntPtr.Zero)
+		{
+			return false;
+		}
+		return GetAncestor(window, 2u) == expectedRoot;
 	}
 
 	public static bool HasRecentUserInput(int maximumIdleSeconds)

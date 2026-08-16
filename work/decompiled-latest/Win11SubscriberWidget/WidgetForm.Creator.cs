@@ -48,10 +48,10 @@ internal partial class WidgetForm
 			Location = new Point(34, 30)
 		};
 		creatorCard.Controls.Add(creatorSubLabel);
-		AttachWidgetMouseEvents(creatorCard);
-		AttachWidgetMouseEvents(creatorDot);
-		AttachWidgetMouseEvents(creatorLabel);
-		AttachWidgetMouseEvents(creatorSubLabel);
+		AttachWidgetMouseEvents(creatorCard, interactive: true);
+		AttachWidgetMouseEvents(creatorDot, interactive: true);
+		AttachWidgetMouseEvents(creatorLabel, interactive: true);
+		AttachWidgetMouseEvents(creatorSubLabel, interactive: true);
 		EventHandler openStudio = delegate
 		{
 			try { Process.Start("https://studio.youtube.com"); }
