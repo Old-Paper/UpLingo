@@ -2,6 +2,8 @@
 
 UpLingo 是一款面向内容创作者的 Windows 桌面数据小组件。它把 B 站与 YouTube 的粉丝数据、成长目标、投稿节奏和专业软件使用记录放在同一个轻量界面中。
 
+当前稳定版本：**UpLingo v1.11.0 LTS**。长期支持范围见 [SUPPORT.md](SUPPORT.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 主要功能
 
 - B 站 / YouTube 粉丝数、托盘轮播与缓存回退。

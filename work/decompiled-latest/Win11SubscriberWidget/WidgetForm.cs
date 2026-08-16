@@ -10,7 +10,7 @@ using System.Windows.Forms;
 
 namespace Win11SubscriberWidget;
 
-internal partial class WidgetForm : Form
+internal partial class WidgetForm : Form, IMessageFilter
 {
 	private const int StartupRefreshDelaySeconds = 300;
 
@@ -149,6 +149,14 @@ internal partial class WidgetForm : Form
 
 	private Point dragStartLocation;
 
+	private bool edgeResizing;
+
+	private int edgeResizeHit;
+
+	private Point edgeResizeStartScreen;
+
+	private Rectangle edgeResizeStartBounds;
+
 	protected override CreateParams CreateParams
 	{
 		get
@@ -175,6 +183,7 @@ internal partial class WidgetForm : Form
 		DoubleBuffered = true;
 		RestoreCreatorState();
 		BuildUi();
+		Application.AddMessageFilter(this);
 		BuildTrayMenu();
 		BuildTrayIcon();
 		MoveToSavedPosition();
@@ -215,6 +224,7 @@ internal partial class WidgetForm : Form
 		CaptureUsageStats(forceSave: true);
 		StopUsageStatsTracking();
 		appQuitting = true;
+		Application.RemoveMessageFilter(this);
 		refreshGeneration++;
 		channelClickTimer?.Stop();
 		channelClickTimer?.Dispose();
@@ -312,6 +322,24 @@ internal partial class WidgetForm : Form
 			m.Result = IntPtr.Zero;
 			return;
 		}
+		if (m.Msg == 161 && IsResizeHit(m.WParam.ToInt32()) && !WidgetWindowModes.IsLocked(config?.window_mode))
+		{
+			BeginEdgeResize(m.WParam.ToInt32());
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		if (edgeResizing && m.Msg == 512)
+		{
+			ContinueEdgeResize();
+			m.Result = IntPtr.Zero;
+			return;
+		}
+		if (edgeResizing && (m.Msg == 514 || m.Msg == 162 || m.Msg == 533))
+		{
+			EndEdgeResize();
+			m.Result = IntPtr.Zero;
+			return;
+		}
 		base.WndProc(ref m);
 		if (m.Msg != 132 || m.Result != new IntPtr(1) || WidgetWindowModes.IsLocked(config?.window_mode))
 		{
@@ -357,6 +385,138 @@ internal partial class WidgetForm : Form
 		else if (bottom)
 		{
 			m.Result = new IntPtr(15);
+		}
+	}
+
+	public bool PreFilterMessage(ref Message m)
+	{
+		if (appQuitting)
+		{
+			return false;
+		}
+		if (edgeResizing)
+		{
+			if (m.Msg == 512 || m.Msg == 160)
+			{
+				ContinueEdgeResize();
+				return true;
+			}
+			if (m.Msg == 514 || m.Msg == 162 || m.Msg == 533)
+			{
+				EndEdgeResize();
+				return true;
+			}
+		}
+		if (m.Msg != 513 || !Visible || WidgetWindowModes.IsLocked(config?.window_mode))
+		{
+			return false;
+		}
+		int hit = ResizeHitAtScreenPoint(Cursor.Position);
+		if (!IsResizeHit(hit))
+		{
+			return false;
+		}
+		BeginEdgeResize(hit);
+		return true;
+	}
+
+	private int ResizeHitAtScreenPoint(Point screenPoint)
+	{
+		Rectangle bounds = Bounds;
+		if (!bounds.Contains(screenPoint))
+		{
+			return 1;
+		}
+		int border = Math.Max(5, DeviceDpi / 16);
+		bool left = screenPoint.X - bounds.Left <= border;
+		bool right = bounds.Right - screenPoint.X <= border;
+		bool top = screenPoint.Y - bounds.Top <= border;
+		bool bottom = bounds.Bottom - screenPoint.Y <= border;
+		if (left && top)
+		{
+			return 13;
+		}
+		if (right && top)
+		{
+			return 14;
+		}
+		if (left && bottom)
+		{
+			return 16;
+		}
+		if (right && bottom)
+		{
+			return 17;
+		}
+		if (left)
+		{
+			return 10;
+		}
+		if (right)
+		{
+			return 11;
+		}
+		if (top)
+		{
+			return 12;
+		}
+		return bottom ? 15 : 1;
+	}
+
+	private static bool IsResizeHit(int hit)
+	{
+		return hit >= 10 && hit <= 17;
+	}
+
+	private void BeginEdgeResize(int hit)
+	{
+		edgeResizing = true;
+		edgeResizeHit = hit;
+		edgeResizeStartScreen = Cursor.Position;
+		edgeResizeStartBounds = Bounds;
+		Capture = true;
+	}
+
+	private void ContinueEdgeResize()
+	{
+		Point position = Cursor.Position;
+		int deltaX = position.X - edgeResizeStartScreen.X;
+		int deltaY = position.Y - edgeResizeStartScreen.Y;
+		Rectangle bounds = edgeResizeStartBounds;
+		int minimumWidth = Math.Max(1, MinimumSize.Width);
+		int minimumHeight = Math.Max(1, MinimumSize.Height);
+		if (edgeResizeHit == 10 || edgeResizeHit == 13 || edgeResizeHit == 16)
+		{
+			int right = bounds.Right;
+			bounds.X = Math.Min(bounds.X + deltaX, right - minimumWidth);
+			bounds.Width = right - bounds.X;
+		}
+		else if (edgeResizeHit == 11 || edgeResizeHit == 14 || edgeResizeHit == 17)
+		{
+			bounds.Width = Math.Max(minimumWidth, bounds.Width + deltaX);
+		}
+		if (edgeResizeHit == 12 || edgeResizeHit == 13 || edgeResizeHit == 14)
+		{
+			int bottom = bounds.Bottom;
+			bounds.Y = Math.Min(bounds.Y + deltaY, bottom - minimumHeight);
+			bounds.Height = bottom - bounds.Y;
+		}
+		else if (edgeResizeHit == 15 || edgeResizeHit == 16 || edgeResizeHit == 17)
+		{
+			bounds.Height = Math.Max(minimumHeight, bounds.Height + deltaY);
+		}
+		Bounds = bounds;
+	}
+
+	private void EndEdgeResize()
+	{
+		edgeResizing = false;
+		Capture = false;
+		if (!appQuitting && WindowState == FormWindowState.Normal)
+		{
+			config.window_width = ClientSize.Width;
+			config.window_height = ClientSize.Height;
+			ConfigStore.Save(config);
 		}
 	}
 
@@ -1031,7 +1191,11 @@ internal partial class WidgetForm : Form
 			else
 			{
 				string text3 = ChannelIdentity.ConfiguredKey(channelConfig);
-				if (text3.StartsWith("@"))
+				if (!string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube(text3)))
+				{
+					text = null;
+				}
+				else if (text3.StartsWith("@"))
 				{
 					text = "https://www.youtube.com/" + text3;
 				}
