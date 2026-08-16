@@ -22,8 +22,6 @@ internal partial class WidgetForm : Form
 
 	private const int WsSystemMenu = 524288;
 
-	private const int WsThickFrame = 262144;
-
 	private const int WsMinimizeBox = 131072;
 
 	private const int WsMaximizeBox = 65536;
@@ -156,8 +154,7 @@ internal partial class WidgetForm : Form
 		get
 		{
 			CreateParams obj = base.CreateParams;
-			obj.ClassStyle |= 131072;
-			obj.Style = (obj.Style | WsPopup | WsThickFrame) & ~(WsChild | WsCaption | WsSystemMenu | WsMinimizeBox | WsMaximizeBox);
+			obj.Style = (obj.Style | WsPopup) & ~(WsChild | WsCaption | WsSystemMenu | WsMinimizeBox | WsMaximizeBox);
 			return obj;
 		}
 	}

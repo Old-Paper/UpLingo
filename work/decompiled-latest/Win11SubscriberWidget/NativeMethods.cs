@@ -35,8 +35,6 @@ internal static class NativeMethods
 
 	private const long WS_SYSMENU = 524288L;
 
-	private const long WS_THICKFRAME = 262144L;
-
 	private const long WS_MINIMIZEBOX = 131072L;
 
 	private const long WS_MAXIMIZEBOX = 65536L;
@@ -190,7 +188,7 @@ internal static class NativeMethods
 	public static void SetWindowAsPopup(IntPtr hwnd)
 	{
 		long windowStyle = GetWindowStyle(hwnd);
-		windowStyle = (windowStyle | WS_POPUP | WS_VISIBLE | WS_THICKFRAME) & ~(WS_CHILD | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+		windowStyle = (windowStyle | WS_POPUP | WS_VISIBLE) & ~(WS_CHILD | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
 		SetWindowStyle(hwnd, windowStyle);
 		SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	}
