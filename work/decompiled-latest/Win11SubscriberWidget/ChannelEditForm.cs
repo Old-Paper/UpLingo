@@ -151,15 +151,23 @@ internal static class ChannelInputValidator
 		{
 			return "YouTube 频道应填写 @handle、UC 开头的频道 ID 或完整频道链接。";
 		}
-		if (!Uri.TryCreate(value, UriKind.Absolute, out Uri uri) || !uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase))
+		if (!Uri.TryCreate(value, UriKind.Absolute, out Uri uri) || !IsYouTubeHost(uri.Host))
 		{
 			return "请输入有效的 YouTube 频道链接。";
 		}
 		string[] parts = uri.AbsolutePath.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-		if (parts.Length == 0 || (!parts[0].StartsWith("@", StringComparison.Ordinal) && !string.Equals(parts[0], "channel", StringComparison.OrdinalIgnoreCase) && !string.Equals(parts[0], "user", StringComparison.OrdinalIgnoreCase)))
+		bool handlePath = parts.Length > 0 && parts[0].StartsWith("@", StringComparison.Ordinal) && parts[0].Length > 1;
+		bool idPath = parts.Length > 1 && (string.Equals(parts[0], "channel", StringComparison.OrdinalIgnoreCase) || string.Equals(parts[0], "user", StringComparison.OrdinalIgnoreCase));
+		if (!handlePath && !idPath)
 		{
 			return "链接应为 YouTube 的 @handle、/channel/ 或 /user/ 频道地址。";
 		}
 		return "";
+	}
+
+	private static bool IsYouTubeHost(string host)
+	{
+		return string.Equals(host, "youtube.com", StringComparison.OrdinalIgnoreCase) ||
+			host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase);
 	}
 }

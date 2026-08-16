@@ -46,6 +46,8 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Refresh results carry an in-memory generation id; stale results after settings changes must be discarded.
 - Closing hides to tray by default. Normal launch is single-instance. `--self-test`, `--logic-test`, `--fetch-test`, and `--achievements` may run separately.
 - Closing follows `close_action`: `tray` hides and `exit` quits. A single tray click hides a visible surface or restores a hidden/covered surface.
+- The widget is borderless and intentionally does not use `WS_THICKFRAME`, which produces a visible Windows frame on some systems. Edge resizing is implemented by `WidgetForm` through `IMessageFilter`; keep the real drag smoke test when changing it.
+- YouTube URLs accepted from configuration must resolve to `youtube.com` or a real subdomain of it. Revalidate old configuration before opening a browser.
 - If tray carousel is off, show static YouTube subscriber count.
 - Do not restore any play/view-count request unless the UI feature is explicitly requested again.
 - Opening any known professional app completes the daily software check-in. Usage/reward time counts only while a known app owns the foreground window and Windows has seen user input within 5 minutes. Keep the aggregation local; never inspect files, projects, window titles, or send usage data anywhere. Cards may only repair historical days/months and never turn current pending time into a completed check-in.

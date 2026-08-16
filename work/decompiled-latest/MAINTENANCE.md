@@ -26,6 +26,8 @@ Use this file to route work before reading source. Avoid opening all of `WidgetF
 - Existing deployments keep `config.json`, logs, reports, and personal `motivational_slogans.txt`.
 - Channel cards use delayed single-click editing so a double-click can open the channel without opening the editor. Preserve the drag threshold when changing these events.
 - Window state is one three-state value: `free`, `topmost`, or `locked_topmost`. Legacy booleans remain serialized only for backward compatibility.
+- Window resizing is custom because a native `WS_THICKFRAME` produces a white frame on some Windows themes. Keep the form borderless and exercise a real edge drag after changing `CreateParams`, `WndProc`, or the message filter.
+- Only open configured YouTube URLs after `ChannelInputValidator` accepts the exact `youtube.com` host or one of its subdomains.
 
 ## Verification
 

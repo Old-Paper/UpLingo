@@ -90,6 +90,9 @@ internal static class LogicSelfTest
 		Assert(string.IsNullOrEmpty(ChannelInputValidator.ValidateBilibili("123456")), "有效 B 站 UID 被拒绝");
 		Assert(!string.IsNullOrEmpty(ChannelInputValidator.ValidateBilibili("YOUR_BILIBILI_UID")), "B 站占位 UID 未被拒绝");
 		Assert(string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube("@creator")), "有效 YouTube Handle 被拒绝");
+		Assert(string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube("https://www.youtube.com/@creator")), "有效 YouTube 链接被拒绝");
+		Assert(!string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube("https://notyoutube.com/@creator")), "伪造的 YouTube 域名未被拒绝");
+		Assert(!string.IsNullOrEmpty(ChannelInputValidator.ValidateYouTube("https://youtube.com/channel")), "缺少频道 ID 的链接未被拒绝");
 	}
 
 	private static void TestWeeklyReportGate()
