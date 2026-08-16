@@ -2,10 +2,13 @@
 
 UpLingo 是一款面向内容创作者的 Windows 桌面数据小组件。它把 B 站与 YouTube 的粉丝数据、成长目标、投稿节奏和专业软件使用记录放在同一个轻量界面中。
 
+当前稳定版本：**UpLingo v1.11.0 LTS**。长期支持范围见 [SUPPORT.md](SUPPORT.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 主要功能
 
 - B 站 / YouTube 粉丝数、托盘轮播与缓存回退。
-- 里程碑进度、对标频道、差距百分比、成就记录和全屏烟花。
+- 里程碑进度、参考频道、差距百分比、成就记录和全屏烟花。
+- 单击频道卡片编辑、双击打开频道；窗口支持自由移动、置顶、锁定和边缘缩放。
 - 周报、粉丝趋势与自定义励志标语。
 - YouTube 投稿打卡、连续投稿与补签卡。
 - OBS、Premiere Pro、After Effects、Photoshop、达芬奇、剪映、Audition、FL Studio、Blender 等专业软件的本地使用统计与连续打开打卡。
@@ -16,7 +19,7 @@ UpLingo 是一款面向内容创作者的 Windows 桌面数据小组件。它把
 
 系统要求：Windows 10 / Windows 11，以及 .NET Framework 4.8。
 
-首次运行后，右键小组件或托盘图标进入“设置”，填写 B 站 UID、YouTube 频道和 YouTube Data API Key。也可以先将 `work/UpLingo-distributable-assets/config.example.json` 复制为 `config.json` 后再填写。
+首次运行后，单击 B 站或 YouTube 卡片填写频道信息；右键小组件或托盘图标进入“设置”，填写 YouTube Data API Key。也可以先将 `work/UpLingo-distributable-assets/config.example.json` 复制为 `config.json` 后再填写。
 
 ## 从源码构建
 

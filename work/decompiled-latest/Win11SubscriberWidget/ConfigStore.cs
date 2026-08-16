@@ -87,17 +87,30 @@ internal static class ConfigStore
 		return javaScriptSerializer.Deserialize<WidgetConfig>(javaScriptSerializer.Serialize(config));
 	}
 
+	public static bool TryReadCurrent(out WidgetConfig config)
+	{
+		if (!TryLoadFile(ConfigPath, out config))
+		{
+			return false;
+		}
+		config.ApplyDefaults();
+		return true;
+	}
+
 	private static WidgetConfig CreateDefault()
 	{
 		WidgetConfig obj = new WidgetConfig
 		{
+			refresh_seconds = 3600,
 			refresh_minutes = 60,
-			low_power_mode = true,
+			low_power_mode = false,
 			dock_to_tray = true,
 			show_full_counts = false,
 			show_tray_counts = true,
 			silent_start = false,
-			always_on_top = false,
+			always_on_top = true,
+			window_mode = WidgetWindowModes.Topmost,
+			close_action = WidgetCloseActions.Tray,
 			position = new PositionConfig
 			{
 				x = 80,
