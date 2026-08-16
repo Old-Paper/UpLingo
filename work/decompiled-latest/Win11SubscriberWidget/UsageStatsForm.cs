@@ -14,6 +14,7 @@ internal sealed class UsageStatsForm : Form
 		config = source ?? new WidgetConfig();
 		config.ApplyDefaults();
 		Text = AppInfo.DisplayName + " · 使用与打卡统计";
+		Icon = AppIcon.Load();
 		StartPosition = FormStartPosition.CenterParent;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MinimizeBox = false;

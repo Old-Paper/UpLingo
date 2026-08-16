@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 
 namespace Win11SubscriberWidget;
 
 public class WidgetConfig
 {
+	public int refresh_seconds { get; set; }
+
 	public int refresh_minutes { get; set; }
 
 	public bool low_power_mode { get; set; }
@@ -20,7 +23,15 @@ public class WidgetConfig
 
 	public bool lock_position { get; set; }
 
+	public string window_mode { get; set; }
+
+	public string close_action { get; set; }
+
 	public PositionConfig position { get; set; }
+
+	public int window_width { get; set; }
+
+	public int window_height { get; set; }
 
 	public string youtube_api_key { get; set; }
 
@@ -60,9 +71,25 @@ public class WidgetConfig
 
 	public void ApplyDefaults()
 	{
-		if (refresh_minutes <= 0)
+		if (refresh_seconds <= 0)
 		{
-			refresh_minutes = 60;
+			refresh_seconds = NormalizeRefreshSeconds((refresh_minutes > 0) ? (refresh_minutes * 60) : 3600);
+		}
+		else
+		{
+			refresh_seconds = NormalizeRefreshSeconds(refresh_seconds);
+		}
+		refresh_minutes = Math.Max(1, refresh_seconds / 60);
+		low_power_mode = false;
+		silent_start = false;
+		if (string.IsNullOrWhiteSpace(window_mode))
+		{
+			window_mode = lock_position ? WidgetWindowModes.LockedTopmost : (always_on_top ? WidgetWindowModes.Topmost : WidgetWindowModes.Free);
+		}
+		SetWindowMode(window_mode);
+		if (!string.Equals(close_action, WidgetCloseActions.Exit, System.StringComparison.OrdinalIgnoreCase))
+		{
+			close_action = WidgetCloseActions.Tray;
 		}
 		if (position == null)
 		{
@@ -75,6 +102,13 @@ public class WidgetConfig
 		if (channels == null)
 		{
 			channels = new List<ChannelConfig>();
+		}
+		foreach (ChannelConfig channel in channels)
+		{
+			if (channel != null && channel.benchmark && !string.IsNullOrEmpty(channel.label) && channel.label.Contains("对标"))
+			{
+				channel.label = channel.label.Replace("对标", "参考");
+			}
 		}
 		if (cached_counts == null)
 		{
@@ -147,5 +181,29 @@ public class WidgetConfig
 				youtube_channel = "@your_handle_or_UC_channel_id"
 			});
 		}
+	}
+
+	public void SetWindowMode(string mode)
+	{
+		window_mode = WidgetWindowModes.Normalize(mode);
+		always_on_top = WidgetWindowModes.IsTopmost(window_mode);
+		lock_position = WidgetWindowModes.IsLocked(window_mode);
+	}
+
+	public static int NormalizeRefreshSeconds(int seconds)
+	{
+		int[] choices = new int[4] { 60, 300, 900, 3600 };
+		int best = choices[0];
+		int distance = Math.Abs(seconds - best);
+		for (int i = 1; i < choices.Length; i++)
+		{
+			int candidateDistance = Math.Abs(seconds - choices[i]);
+			if (candidateDistance < distance)
+			{
+				best = choices[i];
+				distance = candidateDistance;
+			}
+		}
+		return best;
 	}
 }

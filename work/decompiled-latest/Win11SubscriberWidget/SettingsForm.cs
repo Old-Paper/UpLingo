@@ -7,10 +7,6 @@ namespace Win11SubscriberWidget;
 
 internal class SettingsForm : Form
 {
-	private TextBox biliUidBox;
-
-	private TextBox youtubeChannelBox;
-
 	private TextBox benchBiliUidBox;
 
 	private TextBox benchYoutubeChannelBox;
@@ -21,9 +17,7 @@ internal class SettingsForm : Form
 
 	private NumericUpDown surgeAlertBox;
 
-	private NumericUpDown refreshMinutesBox;
-
-	private CheckBox lowPowerBox;
+	private ComboBox refreshSecondsBox;
 
 	private CheckBox fullCountsBox;
 
@@ -31,23 +25,22 @@ internal class SettingsForm : Form
 
 	private CheckBox dockToTrayBox;
 
-	private CheckBox topmostBox;
-
-	private CheckBox lockPositionBox;
-
-	private CheckBox silentStartBox;
+	private ComboBox closeActionBox;
 
 	private CheckBox startupBox;
 
 	private WidgetConfig config;
 
-	public WidgetConfig ResultConfig { get; private set; }
+	private Label saveStatusLabel;
+
+	public event EventHandler Applied;
 
 	public SettingsForm(WidgetConfig editConfig)
 	{
 		config = editConfig;
 		config.ApplyDefaults();
 		Text = AppInfo.DisplayName + " · 设置";
+		Icon = AppIcon.Load();
 		base.StartPosition = FormStartPosition.CenterParent;
 		base.FormBorderStyle = FormBorderStyle.FixedDialog;
 		base.MinimizeBox = false;
@@ -55,7 +48,7 @@ internal class SettingsForm : Form
 		base.ShowInTaskbar = false;
 		base.AutoScaleMode = AutoScaleMode.Dpi;
 		base.AutoScroll = true;
-		base.ClientSize = new Size(470, 736);
+		base.ClientSize = new Size(470, 574);
 		BackColor = Theme.PanelBackground;
 		ForeColor = Theme.TextPrimary;
 		Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
@@ -73,11 +66,14 @@ internal class SettingsForm : Form
 	protected override void OnLoad(EventArgs e)
 	{
 		base.OnLoad(e);
-		NativeMethods.SetTextBoxPlaceholder(biliUidBox, "个人空间链接里的数字");
-		NativeMethods.SetTextBoxPlaceholder(youtubeChannelBox, "@handle、频道 ID 或链接");
-		NativeMethods.SetTextBoxPlaceholder(benchBiliUidBox, "对标 UID，多个用逗号分隔");
-		NativeMethods.SetTextBoxPlaceholder(benchYoutubeChannelBox, "对标频道，多个用逗号分隔");
+		NativeMethods.SetTextBoxPlaceholder(benchBiliUidBox, "参考 UID，多个用逗号分隔");
+		NativeMethods.SetTextBoxPlaceholder(benchYoutubeChannelBox, "参考频道，多个用逗号分隔");
 		NativeMethods.SetTextBoxPlaceholder(youtubeKeyBox, "Google Cloud 的 Data API v3 密钥");
+		Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+		if (Height > workingArea.Height - 48)
+		{
+			Height = Math.Max(420, workingArea.Height - 48);
+		}
 	}
 
 	private void BuildUi()
@@ -87,22 +83,18 @@ internal class SettingsForm : Form
 		tableLayoutPanel.Padding = new Padding(20, 8, 20, 14);
 		tableLayoutPanel.BackColor = Theme.PanelBackground;
 		tableLayoutPanel.ColumnCount = 2;
-		tableLayoutPanel.RowCount = 21;
+		tableLayoutPanel.RowCount = 16;
 		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122f));
 		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 		base.Controls.Add(tableLayoutPanel);
-		biliUidBox = CreateTextBox();
-		youtubeChannelBox = CreateTextBox();
 		benchBiliUidBox = CreateTextBox();
 		benchYoutubeChannelBox = CreateTextBox();
 		youtubeKeyBox = CreateTextBox();
-		refreshMinutesBox = new NumericUpDown();
-		refreshMinutesBox.Minimum = 1m;
-		refreshMinutesBox.Maximum = 1440m;
-		refreshMinutesBox.Width = 120;
-		refreshMinutesBox.BackColor = Theme.InputBackground;
-		refreshMinutesBox.ForeColor = Theme.TextPrimary;
-		refreshMinutesBox.BorderStyle = BorderStyle.FixedSingle;
+		refreshSecondsBox = CreateComboBox();
+		refreshSecondsBox.Items.Add(new RefreshOption(60, "60 秒"));
+		refreshSecondsBox.Items.Add(new RefreshOption(300, "5 分钟"));
+		refreshSecondsBox.Items.Add(new RefreshOption(900, "15 分钟"));
+		refreshSecondsBox.Items.Add(new RefreshOption(3600, "60 分钟"));
 		overtakeWarnBox = new NumericUpDown();
 		overtakeWarnBox.Minimum = 1m;
 		overtakeWarnBox.Maximum = 50m;
@@ -117,53 +109,63 @@ internal class SettingsForm : Form
 		surgeAlertBox.BackColor = Theme.InputBackground;
 		surgeAlertBox.ForeColor = Theme.TextPrimary;
 		surgeAlertBox.BorderStyle = BorderStyle.FixedSingle;
-		lowPowerBox = CreateCheckBox("省电模式，刷新间隔不低于 60 分钟");
-		fullCountsBox = CreateCheckBox("以完整数字显示，如 14,000");
+		fullCountsBox = CreateCheckBox("以完整数字显示，如 123,456");
 		trayDataBox = CreateCheckBox("托盘图标轮播 B站 / YouTube 粉丝数（关闭时固定 YT）");
 		dockToTrayBox = CreateCheckBox("面板停靠在屏幕右下角");
-		topmostBox = CreateCheckBox("面板始终悬浮在最上层");
-		lockPositionBox = CreateCheckBox("锁定位置，禁止拖动面板");
-		silentStartBox = CreateCheckBox("启动后直接进托盘，不弹出面板");
+		closeActionBox = CreateComboBox();
+		closeActionBox.Items.Add("最小化到系统托盘");
+		closeActionBox.Items.Add("退出整个软件");
 		startupBox = CreateCheckBox("登录 Windows 时自动运行");
 		int row = 0;
-		AddSectionHeader(tableLayoutPanel, row++, "我的频道");
-		AddRow(tableLayoutPanel, row++, "B 站 UID", biliUidBox);
-		AddRow(tableLayoutPanel, row++, "YouTube 频道", youtubeChannelBox);
-		AddSectionHeader(tableLayoutPanel, row++, "对标频道");
-		AddRow(tableLayoutPanel, row++, "对标 B 站 UID", benchBiliUidBox);
-		AddRow(tableLayoutPanel, row++, "对标 YouTube", benchYoutubeChannelBox);
-		AddRow(tableLayoutPanel, row++, "反超预警（%）", overtakeWarnBox);
+		AddSectionHeader(tableLayoutPanel, row++, "参考频道");
+		AddRow(tableLayoutPanel, row++, "参考 B 站 UID", benchBiliUidBox);
+		AddRow(tableLayoutPanel, row++, "参考 YouTube", benchYoutubeChannelBox);
+		AddRow(tableLayoutPanel, row++, "接近提醒（%）", overtakeWarnBox);
 		AddRow(tableLayoutPanel, row++, "异动提醒（%）", surgeAlertBox);
 		AddSectionHeader(tableLayoutPanel, row++, "数据与刷新");
 		AddRow(tableLayoutPanel, row++, "YouTube API key", youtubeKeyBox);
-		AddRow(tableLayoutPanel, row++, "刷新间隔（分钟）", refreshMinutesBox);
-		AddRow(tableLayoutPanel, row++, "省电模式", lowPowerBox);
+		AddRow(tableLayoutPanel, row++, "刷新间隔", refreshSecondsBox);
 		AddRow(tableLayoutPanel, row++, "完整数字", fullCountsBox);
 		AddRow(tableLayoutPanel, row++, "托盘轮播", trayDataBox);
 		AddSectionHeader(tableLayoutPanel, row++, "窗口行为");
 		AddRow(tableLayoutPanel, row++, "停靠位置", dockToTrayBox);
-		AddRow(tableLayoutPanel, row++, "窗口置顶", topmostBox);
-		AddRow(tableLayoutPanel, row++, "锁定位置", lockPositionBox);
-		AddRow(tableLayoutPanel, row++, "静默启动", silentStartBox);
+		AddRow(tableLayoutPanel, row++, "关闭小组件时", closeActionBox);
 		AddRow(tableLayoutPanel, row++, "开机启动", startupBox);
+		Label versionLabel = new Label
+		{
+			Text = AppInfo.DisplayName,
+			ForeColor = Theme.TextMuted,
+			AutoSize = true,
+			Margin = new Padding(8, 12, 0, 0)
+		};
+		tableLayoutPanel.Controls.Add(versionLabel, 0, row);
+		tableLayoutPanel.SetColumnSpan(versionLabel, 2);
+		row++;
 		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel();
 		flowLayoutPanel.FlowDirection = FlowDirection.RightToLeft;
 		flowLayoutPanel.Dock = DockStyle.Fill;
 		flowLayoutPanel.BackColor = Theme.PanelBackground;
 		flowLayoutPanel.Margin = new Padding(0, 10, 0, 0);
-		Button button = CreateButton("保存", primary: true);
+		Button button = CreateButton("应用", primary: true);
 		button.Click += delegate
 		{
-			SaveAndClose();
+			SaveAndApply();
 		};
-		Button button2 = CreateButton("取消", primary: false);
+		Button button2 = CreateButton("关闭", primary: false);
 		button2.Click += delegate
 		{
-			base.DialogResult = DialogResult.Cancel;
 			Close();
+		};
+		saveStatusLabel = new Label
+		{
+			Text = "",
+			ForeColor = Theme.Success,
+			AutoSize = true,
+			Margin = new Padding(0, 8, 12, 0)
 		};
 		flowLayoutPanel.Controls.Add(button);
 		flowLayoutPanel.Controls.Add(button2);
+		flowLayoutPanel.Controls.Add(saveStatusLabel);
 		tableLayoutPanel.Controls.Add(flowLayoutPanel, 0, row);
 		tableLayoutPanel.SetColumnSpan(flowLayoutPanel, 2);
 	}
@@ -185,6 +187,17 @@ internal class SettingsForm : Form
 			Text = text,
 			AutoSize = true,
 			ForeColor = Theme.TextSecondary
+		};
+	}
+
+	private static ComboBox CreateComboBox()
+	{
+		return new ComboBox
+		{
+			DropDownStyle = ComboBoxStyle.DropDownList,
+			BackColor = Theme.InputBackground,
+			ForeColor = Theme.TextPrimary,
+			FlatStyle = FlatStyle.Flat
 		};
 	}
 
@@ -241,68 +254,72 @@ internal class SettingsForm : Form
 
 	private void LoadValues()
 	{
-		ChannelConfig orCreateChannel = GetOrCreateChannel("bilibili", "B站频道");
-		ChannelConfig orCreateChannel2 = GetOrCreateChannel("youtube", "YouTube频道");
-		biliUidBox.Text = First(orCreateChannel.bilibili_uid, orCreateChannel.uid, orCreateChannel.vmid);
-		youtubeChannelBox.Text = First(orCreateChannel2.youtube_channel, orCreateChannel2.youtube_channel_id, orCreateChannel2.channel_id, orCreateChannel2.youtube_handle, orCreateChannel2.handle, orCreateChannel2.youtube_url, orCreateChannel2.url);
 		benchBiliUidBox.Text = JoinBenchmarkValues("bilibili");
 		benchYoutubeChannelBox.Text = JoinBenchmarkValues("youtube");
 		youtubeKeyBox.Text = config.youtube_api_key;
 		overtakeWarnBox.Value = Math.Max(1, Math.Min(50, (config.overtake_warn_percent <= 0) ? 10 : config.overtake_warn_percent));
 		surgeAlertBox.Value = Math.Max(1, Math.Min(100, (config.surge_alert_percent <= 0) ? 10 : config.surge_alert_percent));
-		refreshMinutesBox.Value = Math.Max(1, Math.Min(1440, (config.refresh_minutes <= 0) ? 60 : config.refresh_minutes));
-		lowPowerBox.Checked = config.low_power_mode;
+		SelectRefreshSeconds(config.refresh_seconds);
 		fullCountsBox.Checked = config.show_full_counts;
 		trayDataBox.Checked = config.show_tray_counts;
 		dockToTrayBox.Checked = config.dock_to_tray;
-		topmostBox.Checked = config.always_on_top;
-		lockPositionBox.Checked = config.lock_position;
-		silentStartBox.Checked = config.silent_start;
+		closeActionBox.SelectedIndex = string.Equals(config.close_action, WidgetCloseActions.Exit, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 		startupBox.Checked = StartupManager.IsEnabled();
 	}
 
-	private void SaveAndClose()
+	private void SaveAndApply()
 	{
-		ChannelConfig orCreateChannel = GetOrCreateChannel("bilibili", "B站频道");
-		ChannelConfig orCreateChannel2 = GetOrCreateChannel("youtube", "YouTube频道");
-		orCreateChannel.platform = "bilibili";
-		orCreateChannel.label = (string.IsNullOrEmpty(orCreateChannel.label) ? "B站频道" : orCreateChannel.label);
-		orCreateChannel.bilibili_uid = biliUidBox.Text.Trim();
-		orCreateChannel.uid = null;
-		orCreateChannel.vmid = null;
-		orCreateChannel2.platform = "youtube";
-		orCreateChannel2.label = (string.IsNullOrEmpty(orCreateChannel2.label) ? "YouTube频道" : orCreateChannel2.label);
-		string text = youtubeChannelBox.Text.Trim();
-		bool flag = !string.Equals(ChannelIdentity.ConfiguredKey(orCreateChannel2), text, StringComparison.OrdinalIgnoreCase);
-		orCreateChannel2.youtube_channel = text;
-		if (flag)
-		{
-			orCreateChannel2.youtube_channel_id = null;
-			orCreateChannel2.channel_id = null;
-		}
-		orCreateChannel2.youtube_handle = null;
-		orCreateChannel2.handle = null;
-		orCreateChannel2.youtube_username = null;
-		orCreateChannel2.username = null;
-		orCreateChannel2.youtube_url = null;
-		orCreateChannel2.url = null;
-		ApplyBenchmarkChannels("bilibili", "B站对标", benchBiliUidBox.Text);
-		ApplyBenchmarkChannels("youtube", "YouTube对标", benchYoutubeChannelBox.Text);
+		ApplyBenchmarkChannels("bilibili", "B站参考", benchBiliUidBox.Text);
+		ApplyBenchmarkChannels("youtube", "YouTube参考", benchYoutubeChannelBox.Text);
 		config.youtube_api_key = youtubeKeyBox.Text.Trim();
 		config.overtake_warn_percent = Convert.ToInt32(overtakeWarnBox.Value);
 		config.surge_alert_percent = Convert.ToInt32(surgeAlertBox.Value);
-		config.refresh_minutes = Convert.ToInt32(refreshMinutesBox.Value);
-		config.low_power_mode = lowPowerBox.Checked;
+		config.refresh_seconds = SelectedRefreshSeconds();
+		config.refresh_minutes = Math.Max(1, config.refresh_seconds / 60);
+		config.low_power_mode = false;
 		config.show_full_counts = fullCountsBox.Checked;
 		config.show_tray_counts = trayDataBox.Checked;
 		config.dock_to_tray = dockToTrayBox.Checked;
-		config.always_on_top = topmostBox.Checked;
-		config.lock_position = lockPositionBox.Checked;
-		config.silent_start = silentStartBox.Checked;
-		StartupManager.SetEnabled(startupBox.Checked);
-		ResultConfig = config;
-		base.DialogResult = DialogResult.OK;
-		Close();
+		config.close_action = (closeActionBox.SelectedIndex == 1) ? WidgetCloseActions.Exit : WidgetCloseActions.Tray;
+		config.silent_start = false;
+		try
+		{
+			StartupManager.SetEnabled(startupBox.Checked);
+			ConfigStore.Save(config);
+			if (!ConfigStore.TryReadCurrent(out WidgetConfig saved) || saved.refresh_seconds != config.refresh_seconds || !string.Equals(saved.close_action, config.close_action, StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidOperationException("保存后的配置校验失败");
+			}
+			saveStatusLabel.ForeColor = Theme.Success;
+			saveStatusLabel.Text = "已保存";
+			Applied?.Invoke(this, EventArgs.Empty);
+		}
+		catch (Exception ex)
+		{
+			saveStatusLabel.ForeColor = Theme.Error;
+			saveStatusLabel.Text = "保存失败";
+			AppLogger.Error("settings-save", ex);
+			MessageBox.Show("设置未能保存：" + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+		}
+	}
+
+	private void SelectRefreshSeconds(int seconds)
+	{
+		int normalized = WidgetConfig.NormalizeRefreshSeconds(seconds);
+		for (int i = 0; i < refreshSecondsBox.Items.Count; i++)
+		{
+			if (refreshSecondsBox.Items[i] is RefreshOption option && option.Seconds == normalized)
+			{
+				refreshSecondsBox.SelectedIndex = i;
+				return;
+			}
+		}
+		refreshSecondsBox.SelectedIndex = refreshSecondsBox.Items.Count - 1;
+	}
+
+	private int SelectedRefreshSeconds()
+	{
+		return (refreshSecondsBox.SelectedItem as RefreshOption)?.Seconds ?? 3600;
 	}
 
 	private ChannelConfig GetOrCreateChannel(string platform, string label)
@@ -448,5 +465,23 @@ internal class SettingsForm : Form
 			}
 		}
 		return "";
+	}
+
+	private sealed class RefreshOption
+	{
+		public int Seconds { get; }
+
+		private string Text { get; }
+
+		public RefreshOption(int seconds, string text)
+		{
+			Seconds = seconds;
+			Text = text;
+		}
+
+		public override string ToString()
+		{
+			return Text;
+		}
 	}
 }

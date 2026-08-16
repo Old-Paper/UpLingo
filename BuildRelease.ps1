@@ -7,8 +7,9 @@ $workspace = [IO.Path]::GetFullPath($PSScriptRoot)
 $source = Join-Path $workspace "work\decompiled-latest"
 $assets = Join-Path $workspace "work\UpLingo-distributable-assets"
 $outputs = Join-Path $workspace "outputs"
+$portableDotnetFixed = Join-Path $workspace "work\dotnet-sdk-fixed\dotnet.exe"
 $portableDotnet = Join-Path $workspace "work\dotnet-sdk\dotnet.exe"
-$dotnet = if (Test-Path -LiteralPath $portableDotnet) { $portableDotnet } else { "dotnet" }
+$dotnet = if (Test-Path -LiteralPath $portableDotnetFixed) { $portableDotnetFixed } elseif (Test-Path -LiteralPath $portableDotnet) { $portableDotnet } else { "dotnet" }
 [xml]$project = Get-Content -LiteralPath (Join-Path $source "Win11SubscriberWidget.csproj") -Raw -Encoding UTF8
 $assemblyName = [string]($project.Project.PropertyGroup.AssemblyName | Select-Object -First 1)
 if ([string]::IsNullOrWhiteSpace($assemblyName) -or $assemblyName -notmatch '^UpLingo-(.+)$') { throw "Invalid AssemblyName: $assemblyName" }
@@ -55,6 +56,7 @@ Copy-Item -LiteralPath (Join-Path $source "AGENTS.md") -Destination $releaseSour
 Copy-Item -LiteralPath (Join-Path $source "MAINTENANCE.md") -Destination $releaseSource
 Copy-Item -LiteralPath (Join-Path $source "RunChecks.ps1") -Destination $releaseSource
 Copy-Item -LiteralPath (Join-Path $source "Properties") -Destination $releaseSource -Recurse
+Copy-Item -LiteralPath (Join-Path $source "Resources") -Destination $releaseSource -Recurse
 Copy-Item -LiteralPath (Join-Path $source "Win11SubscriberWidget") -Destination $releaseSource -Recurse
 
 New-Item -ItemType Directory -Path $outputs -Force | Out-Null
