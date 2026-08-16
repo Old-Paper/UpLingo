@@ -14,6 +14,20 @@ internal partial class WidgetForm : Form
 {
 	private const int StartupRefreshDelaySeconds = 300;
 
+	private const int WsChild = 1073741824;
+
+	private const int WsPopup = unchecked((int)2147483648u);
+
+	private const int WsCaption = 12582912;
+
+	private const int WsSystemMenu = 524288;
+
+	private const int WsThickFrame = 262144;
+
+	private const int WsMinimizeBox = 131072;
+
+	private const int WsMaximizeBox = 65536;
+
 	private const int RowHeight = 70;
 
 	private const int RowSpacing = 8;
@@ -143,7 +157,7 @@ internal partial class WidgetForm : Form
 		{
 			CreateParams obj = base.CreateParams;
 			obj.ClassStyle |= 131072;
-			obj.Style |= 262144;
+			obj.Style = (obj.Style | WsPopup | WsThickFrame) & ~(WsChild | WsCaption | WsSystemMenu | WsMinimizeBox | WsMaximizeBox);
 			return obj;
 		}
 	}
@@ -296,7 +310,7 @@ internal partial class WidgetForm : Form
 
 	protected override void WndProc(ref Message m)
 	{
-		if (m.Msg == 131 && m.WParam != IntPtr.Zero)
+		if (m.Msg == 131)
 		{
 			m.Result = IntPtr.Zero;
 			return;
@@ -1225,7 +1239,7 @@ internal partial class WidgetForm : Form
 		{
 			bool topmost = WidgetWindowModes.IsTopmost(config.window_mode);
 			base.TopMost = topmost;
-			NativeMethods.SetWindowPos(base.Handle, topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
+			NativeMethods.SetWindowPos(base.Handle, topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 		}
 	}
 
