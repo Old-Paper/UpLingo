@@ -12,8 +12,8 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Creator card partial: `Win11SubscriberWidget/WidgetForm.Creator.cs`.
 - Professional usage partial: `Win11SubscriberWidget/WidgetForm.UsageTracking.cs`.
 - Build: `..\dotnet-sdk\dotnet.exe build .\Win11SubscriberWidget.csproj -c Release --no-restore` from this directory.
-- Output executable: `bin\Release\net48\UpLingo-1.11.0.exe`.
-- Logic check: run `bin\Release\net48\UpLingo-1.11.0.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
+- Output executable: `bin\Release\net48\UpLingo-1.11.2.exe`.
+- Logic check: run `bin\Release\net48\UpLingo-1.11.2.exe --logic-test`, then confirm `logic-test.log` says `PASS`.
 - Interface check: run the EXE with `--fetch-test`; it writes `fetch-test.log` and does not save fetched data.
 - Standard local check: run `./RunChecks.ps1`.
 
@@ -30,7 +30,7 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - `CardPanel.cs`: sparkline, 12-month 投稿 check-in grid, and paired red/yellow + blue/purple flame streak drawing.
 - `SettingsForm.cs`: modeless settings UI and reference-channel editing.
 - `ChannelEditForm.cs`: validated single-click owner-channel editor.
-- `WindowStateButton.cs`: code-drawn three-state free/topmost/locked button.
+- `WindowStateButton.cs`: code-drawn four-state free/topmost/locked-topmost/locked button.
 - `Resources/UpLingoIcon.svg` and `Resources/Generate-AppIcon.ps1`: reproducible application icon source and generator.
 - `AppLogger.cs`: redacted, rotating `widget_debug.log`.
 - `ProfessionalAppCatalog.cs`, `UsageStatsService.cs`, `ProfessionalCheckinService.cs`: local professional-software tracking, daily check-ins, and time-based make-up-card rewards.
@@ -46,6 +46,7 @@ Read `MAINTENANCE.md` first and open only the files routed for the current task.
 - Refresh results carry an in-memory generation id; stale results after settings changes must be discarded.
 - Closing hides to tray by default. Normal launch is single-instance. `--self-test`, `--logic-test`, `--fetch-test`, and `--achievements` may run separately.
 - Closing follows `close_action`: `tray` hides and `exit` quits. A single tray click hides a visible surface or restores a hidden/covered surface.
+- The Windows Run entry must include `--startup`. Only that launch source may honor `silent_start`; a manual launch must always show the widget.
 - The widget is borderless and intentionally does not use `WS_THICKFRAME`, which produces a visible Windows frame on some systems. Edge resizing is implemented by `WidgetForm` through `IMessageFilter`; keep the real drag smoke test when changing it.
 - YouTube URLs accepted from configuration must resolve to `youtube.com` or a real subdomain of it. Revalidate old configuration before opening a browser.
 - If tray carousel is off, show static YouTube subscriber count.

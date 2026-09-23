@@ -10,6 +10,8 @@ internal static class WidgetWindowModes
 
 	public const string LockedTopmost = "locked_topmost";
 
+	public const string Locked = "locked";
+
 	public static string Normalize(string mode)
 	{
 		if (string.Equals(mode, LockedTopmost, StringComparison.OrdinalIgnoreCase))
@@ -19,6 +21,10 @@ internal static class WidgetWindowModes
 		if (string.Equals(mode, Topmost, StringComparison.OrdinalIgnoreCase))
 		{
 			return Topmost;
+		}
+		if (string.Equals(mode, Locked, StringComparison.OrdinalIgnoreCase))
+		{
+			return Locked;
 		}
 		return Free;
 	}
@@ -31,7 +37,8 @@ internal static class WidgetWindowModes
 
 	public static bool IsLocked(string mode)
 	{
-		return Normalize(mode) == LockedTopmost;
+		string normalized = Normalize(mode);
+		return normalized == LockedTopmost || normalized == Locked;
 	}
 
 	public static string Next(string mode)
@@ -42,6 +49,8 @@ internal static class WidgetWindowModes
 			return Topmost;
 		case Topmost:
 			return LockedTopmost;
+		case LockedTopmost:
+			return Locked;
 		default:
 			return Free;
 		}
@@ -55,6 +64,8 @@ internal static class WidgetWindowModes
 			return "窗口置顶";
 		case LockedTopmost:
 			return "锁定且置顶";
+		case Locked:
+			return "锁定但不置顶";
 		default:
 			return "自由移动";
 		}

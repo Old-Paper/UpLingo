@@ -56,6 +56,10 @@ internal sealed class WindowStateButton : Control
 		if (WidgetWindowModes.IsLocked(mode))
 		{
 			DrawLock(e.Graphics, color);
+			if (WidgetWindowModes.IsTopmost(mode))
+			{
+				DrawTopmostMarker(e.Graphics, color);
+			}
 		}
 		else
 		{
@@ -96,6 +100,19 @@ internal sealed class WindowStateButton : Control
 		graphics.DrawRoundedRectangle(pen, body, 2f);
 		graphics.DrawArc(pen, 9f, 4f, 8f, 11f, 190f, 160f);
 		graphics.FillEllipse(keyBrush, 12f, 13f, 2f, 3f);
+	}
+
+	private void DrawTopmostMarker(Graphics graphics, Color color)
+	{
+		using Pen pen = new Pen(color, 1.5f)
+		{
+			StartCap = LineCap.Round,
+			EndCap = LineCap.Round,
+			LineJoin = LineJoin.Round
+		};
+		graphics.DrawLine(pen, 19f, 6f, 22f, 3f);
+		graphics.DrawLine(pen, 22f, 3f, 25f, 6f);
+		graphics.DrawLine(pen, 22f, 3.5f, 22f, 9f);
 	}
 }
 
