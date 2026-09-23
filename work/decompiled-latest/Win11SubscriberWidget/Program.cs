@@ -25,12 +25,16 @@ internal static class Program
 				return;
 			}
 			bool flag = HasArg(args, "--fetch-test") || HasArg(args, "--achievements") || HasArg(args, "--self-test");
+			bool startupLaunch = HasArg(args, "--startup");
 			if (!flag)
 			{
 				mutex = new Mutex(initiallyOwned: true, "Local\\UpLingo.SingleInstance", out var createdNew);
 				if (!createdNew)
 				{
-					MessageBox.Show(AppInfo.DisplayName + " 已经在运行，请查看右下角托盘。", AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+					if (!startupLaunch)
+					{
+						MessageBox.Show(AppInfo.DisplayName + " 已经在运行，请查看右下角托盘。", AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+					}
 					return;
 				}
 			}
@@ -49,18 +53,18 @@ internal static class Program
 				Application.Run(new AchievementsForm());
 				return;
 			}
-			WidgetForm form = new WidgetForm(widgetConfig, !HasArg(args, "--self-test"));
+			WidgetForm form = new WidgetForm(widgetConfig, !HasArg(args, "--self-test"), startupLaunch && widgetConfig.silent_start);
 			if (HasArg(args, "--self-test"))
 			{
-				System.Threading.Timer timer = new System.Threading.Timer(delegate
+				using System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+				timer.Interval = 800;
+				timer.Tick += delegate
 				{
-					form.BeginInvoke((Action)delegate
-					{
-						form.QuitFromApp();
-					});
-				}, null, 800, -1);
+					timer.Stop();
+					form.QuitFromApp();
+				};
+				timer.Start();
 				Application.Run(form);
-				timer.Dispose();
 			}
 			else
 			{
