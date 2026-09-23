@@ -56,6 +56,8 @@ internal partial class WidgetForm : Form, IMessageFilter
 
 	private ToolStripMenuItem topmostWindowItem;
 
+	private ToolStripMenuItem lockedTopmostWindowItem;
+
 	private ToolStripMenuItem lockedWindowItem;
 
 	private ToolStripMenuItem usageStatsItem;
@@ -131,6 +133,8 @@ internal partial class WidgetForm : Form, IMessageFilter
 
 	private bool appQuitting;
 
+	private bool suppressInitialShow;
+
 	private bool dragging;
 
 	private bool dragCandidate;
@@ -167,10 +171,11 @@ internal partial class WidgetForm : Form, IMessageFilter
 		}
 	}
 
-	public WidgetForm(WidgetConfig initialConfig, bool autoRefresh)
+	public WidgetForm(WidgetConfig initialConfig, bool autoRefresh, bool startHidden = false)
 	{
 		config = initialConfig;
 		config.ApplyDefaults();
+		suppressInitialShow = startHidden;
 		Text = AppInfo.DisplayName;
 		Icon = AppIcon.Load();
 		base.ShowInTaskbar = false;
@@ -201,6 +206,16 @@ internal partial class WidgetForm : Form, IMessageFilter
 		}
 	}
 
+	protected override void SetVisibleCore(bool value)
+	{
+		if (value && suppressInitialShow)
+		{
+			suppressInitialShow = false;
+			value = false;
+		}
+		base.SetVisibleCore(value);
+	}
+
 	protected override void OnHandleCreated(EventArgs e)
 	{
 		base.OnHandleCreated(e);
@@ -213,6 +228,7 @@ internal partial class WidgetForm : Form, IMessageFilter
 	{
 		PrepareForExit();
 		Close();
+		Application.ExitThread();
 	}
 
 	private void PrepareForExit()
@@ -922,9 +938,11 @@ internal partial class WidgetForm : Form, IMessageFilter
 		windowStateItem = new ToolStripMenuItem("窗口状态");
 		freeWindowItem = new ToolStripMenuItem("自由移动");
 		topmostWindowItem = new ToolStripMenuItem("窗口置顶");
-		lockedWindowItem = new ToolStripMenuItem("锁定且置顶");
+		lockedTopmostWindowItem = new ToolStripMenuItem("锁定且置顶");
+		lockedWindowItem = new ToolStripMenuItem("锁定但不置顶");
 		windowStateItem.DropDownItems.Add(freeWindowItem);
 		windowStateItem.DropDownItems.Add(topmostWindowItem);
+		windowStateItem.DropDownItems.Add(lockedTopmostWindowItem);
 		windowStateItem.DropDownItems.Add(lockedWindowItem);
 		ToolStripMenuItem exitItem = new ToolStripMenuItem("退出");
 		showHideItem.Click += delegate
@@ -953,7 +971,8 @@ internal partial class WidgetForm : Form, IMessageFilter
 		};
 		freeWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.Free); };
 		topmostWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.Topmost); };
-		lockedWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.LockedTopmost); };
+		lockedTopmostWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.LockedTopmost); };
+		lockedWindowItem.Click += delegate { SetWindowMode(WidgetWindowModes.Locked); };
 		exitItem.Click += delegate
 		{
 			QuitFromApp();
@@ -1011,7 +1030,8 @@ internal partial class WidgetForm : Form, IMessageFilter
 		string mode = WidgetWindowModes.Normalize(config.window_mode);
 		freeWindowItem.Checked = mode == WidgetWindowModes.Free;
 		topmostWindowItem.Checked = mode == WidgetWindowModes.Topmost;
-		lockedWindowItem.Checked = mode == WidgetWindowModes.LockedTopmost;
+		lockedTopmostWindowItem.Checked = mode == WidgetWindowModes.LockedTopmost;
+		lockedWindowItem.Checked = mode == WidgetWindowModes.Locked;
 		windowStateItem.Text = "窗口状态 · " + WidgetWindowModes.DisplayName(mode);
 	}
 

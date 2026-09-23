@@ -1,3 +1,4 @@
+using System;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -27,7 +28,7 @@ internal static class StartupManager
 		using RegistryKey registryKey = Registry.CurrentUser.CreateSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 		if (enabled)
 		{
-			registryKey.SetValue(ValueName, "\"" + Application.ExecutablePath + "\"");
+			registryKey.SetValue(ValueName, BuildCommand(Application.ExecutablePath));
 			registryKey.DeleteValue(LegacyValueName, throwOnMissingValue: false);
 		}
 		else
@@ -42,10 +43,19 @@ internal static class StartupManager
 		using RegistryKey registryKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
 		object value = registryKey?.GetValue(ValueName);
 		object value2 = registryKey?.GetValue(LegacyValueName);
-		if (value2 == null && (value == null || string.Equals(value.ToString(), "\"" + Application.ExecutablePath + "\"", System.StringComparison.OrdinalIgnoreCase)))
+		if (value2 == null && (value == null || string.Equals(value.ToString(), BuildCommand(Application.ExecutablePath), StringComparison.OrdinalIgnoreCase)))
 		{
 			return;
 		}
 		SetEnabled(enabled: true);
+	}
+
+	internal static string BuildCommand(string executablePath)
+	{
+		if (string.IsNullOrWhiteSpace(executablePath))
+		{
+			throw new ArgumentException("可执行文件路径不能为空", nameof(executablePath));
+		}
+		return "\"" + executablePath + "\" --startup";
 	}
 }

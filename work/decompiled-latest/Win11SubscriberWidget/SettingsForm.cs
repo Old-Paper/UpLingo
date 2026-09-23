@@ -29,6 +29,8 @@ internal class SettingsForm : Form
 
 	private CheckBox startupBox;
 
+	private CheckBox silentStartBox;
+
 	private WidgetConfig config;
 
 	private Label saveStatusLabel;
@@ -48,7 +50,7 @@ internal class SettingsForm : Form
 		base.ShowInTaskbar = false;
 		base.AutoScaleMode = AutoScaleMode.Dpi;
 		base.AutoScroll = true;
-		base.ClientSize = new Size(470, 574);
+		base.ClientSize = new Size(470, 612);
 		BackColor = Theme.PanelBackground;
 		ForeColor = Theme.TextPrimary;
 		Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
@@ -83,7 +85,7 @@ internal class SettingsForm : Form
 		tableLayoutPanel.Padding = new Padding(20, 8, 20, 14);
 		tableLayoutPanel.BackColor = Theme.PanelBackground;
 		tableLayoutPanel.ColumnCount = 2;
-		tableLayoutPanel.RowCount = 16;
+		tableLayoutPanel.RowCount = 17;
 		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122f));
 		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 		base.Controls.Add(tableLayoutPanel);
@@ -116,6 +118,11 @@ internal class SettingsForm : Form
 		closeActionBox.Items.Add("最小化到系统托盘");
 		closeActionBox.Items.Add("退出整个软件");
 		startupBox = CreateCheckBox("登录 Windows 时自动运行");
+		silentStartBox = CreateCheckBox("开机启动时仅驻留系统托盘");
+		startupBox.CheckedChanged += delegate
+		{
+			silentStartBox.Enabled = startupBox.Checked;
+		};
 		int row = 0;
 		AddSectionHeader(tableLayoutPanel, row++, "参考频道");
 		AddRow(tableLayoutPanel, row++, "参考 B 站 UID", benchBiliUidBox);
@@ -131,6 +138,7 @@ internal class SettingsForm : Form
 		AddRow(tableLayoutPanel, row++, "停靠位置", dockToTrayBox);
 		AddRow(tableLayoutPanel, row++, "关闭小组件时", closeActionBox);
 		AddRow(tableLayoutPanel, row++, "开机启动", startupBox);
+		AddRow(tableLayoutPanel, row++, "静默启动", silentStartBox);
 		Label versionLabel = new Label
 		{
 			Text = AppInfo.DisplayName,
@@ -265,6 +273,8 @@ internal class SettingsForm : Form
 		dockToTrayBox.Checked = config.dock_to_tray;
 		closeActionBox.SelectedIndex = string.Equals(config.close_action, WidgetCloseActions.Exit, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 		startupBox.Checked = StartupManager.IsEnabled();
+		silentStartBox.Checked = config.silent_start;
+		silentStartBox.Enabled = startupBox.Checked;
 	}
 
 	private void SaveAndApply()
@@ -281,12 +291,12 @@ internal class SettingsForm : Form
 		config.show_tray_counts = trayDataBox.Checked;
 		config.dock_to_tray = dockToTrayBox.Checked;
 		config.close_action = (closeActionBox.SelectedIndex == 1) ? WidgetCloseActions.Exit : WidgetCloseActions.Tray;
-		config.silent_start = false;
+		config.silent_start = silentStartBox.Checked;
 		try
 		{
 			StartupManager.SetEnabled(startupBox.Checked);
 			ConfigStore.Save(config);
-			if (!ConfigStore.TryReadCurrent(out WidgetConfig saved) || saved.refresh_seconds != config.refresh_seconds || !string.Equals(saved.close_action, config.close_action, StringComparison.OrdinalIgnoreCase))
+			if (!ConfigStore.TryReadCurrent(out WidgetConfig saved) || saved.refresh_seconds != config.refresh_seconds || saved.silent_start != config.silent_start || !string.Equals(saved.close_action, config.close_action, StringComparison.OrdinalIgnoreCase))
 			{
 				throw new InvalidOperationException("保存后的配置校验失败");
 			}
