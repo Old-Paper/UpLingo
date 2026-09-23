@@ -3,6 +3,7 @@
   "dock_to_tray": true,
   "show_full_counts": false,
   "show_tray_counts": true,
+  "silent_start": false,
   "window_mode": "topmost",
   "close_action": "tray",
   "position": {

@@ -81,10 +81,9 @@ public class WidgetConfig
 		}
 		refresh_minutes = Math.Max(1, refresh_seconds / 60);
 		low_power_mode = false;
-		silent_start = false;
 		if (string.IsNullOrWhiteSpace(window_mode))
 		{
-			window_mode = lock_position ? WidgetWindowModes.LockedTopmost : (always_on_top ? WidgetWindowModes.Topmost : WidgetWindowModes.Free);
+			window_mode = lock_position ? (always_on_top ? WidgetWindowModes.LockedTopmost : WidgetWindowModes.Locked) : (always_on_top ? WidgetWindowModes.Topmost : WidgetWindowModes.Free);
 		}
 		SetWindowMode(window_mode);
 		if (!string.Equals(close_action, WidgetCloseActions.Exit, System.StringComparison.OrdinalIgnoreCase))
