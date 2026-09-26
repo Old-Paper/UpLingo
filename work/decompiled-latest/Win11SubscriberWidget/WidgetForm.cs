@@ -193,6 +193,10 @@ internal partial class WidgetForm : Form, IMessageFilter
 		BuildTrayIcon();
 		MoveToSavedPosition();
 		ApplyNormalWindowMode();
+		if (startHidden)
+		{
+			EnsureBackgroundRefreshHandle();
+		}
 		refreshTimer = new System.Windows.Forms.Timer();
 		refreshTimer.Tick += delegate
 		{
@@ -203,6 +207,14 @@ internal partial class WidgetForm : Form, IMessageFilter
 		{
 			RenderCachedCountsForStartup();
 			ScheduleRefreshAfterSeconds(Math.Min(config.refresh_seconds, StartupRefreshDelaySeconds));
+		}
+	}
+
+	private void EnsureBackgroundRefreshHandle()
+	{
+		if (!base.IsDisposed && !base.IsHandleCreated)
+		{
+			IntPtr unusedHandle = base.Handle;
 		}
 	}
 
@@ -1499,10 +1511,11 @@ internal partial class WidgetForm : Form, IMessageFilter
 
 	private void RefreshNow()
 	{
-		if (refreshing)
+		if (refreshing || appQuitting || base.IsDisposed)
 		{
 			return;
 		}
+		EnsureBackgroundRefreshHandle();
 		UpdateSlogan();
 		if (refreshTimer != null)
 		{

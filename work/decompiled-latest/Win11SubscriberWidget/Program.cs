@@ -24,7 +24,7 @@ internal static class Program
 				LogicSelfTest.Run();
 				return;
 			}
-			bool flag = HasArg(args, "--fetch-test") || HasArg(args, "--achievements") || HasArg(args, "--self-test");
+			bool flag = HasArg(args, "--fetch-test") || HasArg(args, "--achievements") || HasArg(args, "--self-test") || HasArg(args, "--silent-startup-test");
 			bool startupLaunch = HasArg(args, "--startup");
 			if (!flag)
 			{
@@ -46,6 +46,11 @@ internal static class Program
 			if (HasArg(args, "--fetch-test"))
 			{
 				RunFetchTest(widgetConfig);
+				return;
+			}
+			if (HasArg(args, "--silent-startup-test"))
+			{
+				RunSilentStartupTest(widgetConfig);
 				return;
 			}
 			if (HasArg(args, "--achievements"))
@@ -89,6 +94,46 @@ internal static class Program
 				}
 				mutex.Dispose();
 			}
+		}
+	}
+
+	private static void RunSilentStartupTest(WidgetConfig config)
+	{
+		string path = Path.Combine(ConfigStore.AppDir, "silent-startup-test.log");
+		WidgetForm form = null;
+		bool passed = false;
+		string detail = "unknown";
+		try
+		{
+			form = new WidgetForm(config, autoRefresh: false, startHidden: true);
+			using System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+			timer.Interval = 250;
+			timer.Tick += delegate
+			{
+				timer.Stop();
+				passed = form.IsHandleCreated && !form.Visible;
+				detail = "handle=" + form.IsHandleCreated + ", visible=" + form.Visible;
+				form.QuitFromApp();
+			};
+			timer.Start();
+			Application.Run(form);
+		}
+		catch (Exception ex)
+		{
+			detail = ex.GetType().Name + ": " + ex.Message;
+		}
+		finally
+		{
+			if (form != null && !form.IsDisposed)
+			{
+				form.QuitFromApp();
+				form.Dispose();
+			}
+		}
+		File.WriteAllText(path, passed ? "PASS" : ("FAIL: " + detail), Encoding.UTF8);
+		if (!passed)
+		{
+			Environment.ExitCode = 1;
 		}
 	}
 
