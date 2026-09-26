@@ -23,4 +23,8 @@ if ($report.Trim() -ne "PASS") { throw "Logic test failed: $report" }
 
 $self = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru -Wait -WindowStyle Hidden
 if ($self.ExitCode -ne 0) { throw "Startup self-test failed." }
-Write-Output "PASS: build, logic test, startup self-test"
+$silent = Start-Process -FilePath $exe -ArgumentList "--silent-startup-test" -PassThru -Wait -WindowStyle Hidden
+if ($silent.ExitCode -ne 0) { throw "Silent-startup self-test process failed." }
+$silentReport = Get-Content -LiteralPath (Join-Path $output "silent-startup-test.log") -Raw -Encoding UTF8
+if ($silentReport.Trim() -ne "PASS") { throw "Silent-startup self-test failed: $silentReport" }
+Write-Output "PASS: build, logic test, startup self-test, silent-startup self-test"
