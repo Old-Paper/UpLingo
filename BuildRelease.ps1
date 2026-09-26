@@ -27,6 +27,10 @@ $logicLog = Get-Content -LiteralPath (Join-Path $exeDir "logic-test.log") -Raw -
 if ($logicLog.Trim() -ne "PASS") { throw "Logic test failed: $logicLog" }
 $selfTest = Start-Process -FilePath $testExe -ArgumentList "--self-test" -PassThru -Wait -WindowStyle Hidden
 if ($selfTest.ExitCode -ne 0) { throw "Startup self-test failed." }
+$silentTest = Start-Process -FilePath $testExe -ArgumentList "--silent-startup-test" -PassThru -Wait -WindowStyle Hidden
+if ($silentTest.ExitCode -ne 0) { throw "Silent-startup self-test process failed." }
+$silentTestLog = Get-Content -LiteralPath (Join-Path $exeDir "silent-startup-test.log") -Raw -Encoding UTF8
+if ($silentTestLog.Trim() -ne "PASS") { throw "Silent-startup self-test failed: $silentTestLog" }
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $staging = Join-Path (Join-Path $workspace "work") ("release-staging-" + $stamp)
