@@ -50,7 +50,3 @@ UpLingo v1.11.2 LTS
 - subscriber_events.log：成就、预警和周报日志。
 - weekly_report.txt：独立周报历史。
 - widget_debug.log：自动轮换的故障诊断日志，不记录 API Key。
-
-分发说明
---------
-本压缩包不包含任何个人账号配置、API Key、缓存、日志或周报。
